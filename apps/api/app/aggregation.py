@@ -75,11 +75,11 @@ def get_meta_data(from_date: str, to_date: str, prefer_live: bool = True) -> dic
     return load_meta_snapshot(target_date=to_date) or {}
 
 
-def get_meta_data_daily(from_date: str, to_date: str) -> list[dict]:
-    """Insights per-day dla trend chartu. Zwraca listę insights account-level z time_increment=1."""
+def get_meta_data_daily(level: str, from_date: str, to_date: str) -> list[dict]:
+    """Insights per-day dla trend chartu (level: 'account' | 'campaign' | 'ad')."""
     try:
         from .meta_client import fetch_insights_daily
-        return fetch_insights_daily("account", from_date, to_date)
+        return fetch_insights_daily(level, from_date, to_date)
     except Exception as e:
         log.warning("Daily insights fetch failed: %s", e)
         return []
