@@ -1,0 +1,39 @@
+# Node
+node_modules/
+.next/
+.vercel/
+dist/
+build/
+*.tsbuildinfo
+next-env.d.ts
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+
+# Env
+.env
+.env.local
+.env.*.local
+
+# Snapshots fallback (sync z Maca)
+apps/api/snapshots/
+*.bak.*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+
+# Logs
+*.log
+logs/
