@@ -1,0 +1,35 @@
+# Caddy reverse proxy dla salespros-dashboard backend.
+# Lokalizacja: /root/salespros-dashboard/deploy/Caddyfile na openclaw.
+#
+# Caddy automatycznie wystawia Let's Encrypt SSL dla api.salespros.app
+# (DNS musi pointować CNAME → openclaw IP lub A → 159.69.34.23).
+#
+# Run:
+#   docker run -d --name caddy --restart always \
+#     --network n8n_default \
+#     -p 80:80 -p 443:443 \
+#     -v /root/salespros-dashboard/deploy/Caddyfile:/etc/caddy/Caddyfile:ro \
+#     -v caddy_data:/data \
+#     -v caddy_config:/config \
+#     caddy:2-alpine
+
+api.salespros.app {
+	# CORS dla Vercel frontend (jeśli kiedyś browser wywoła bezpośrednio)
+	@cors {
+		header Origin https://dashboard.salespros.app
+	}
+	header @cors Access-Control-Allow-Origin "https://dashboard.salespros.app"
+	header @cors Access-Control-Allow-Credentials "true"
+
+	# Forward do FastAPI containera w sieci n8n_default
+	reverse_proxy salespros-dashboard-api:8000 {
+		header_up X-Forwarded-Host {host}
+		header_up X-Real-IP {remote_host}
+	}
+
+	encode gzip
+	log {
+		output stdout
+		format json
+	}
+}

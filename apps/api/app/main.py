@@ -37,13 +37,21 @@ app.add_middleware(
 
 
 @app.middleware("http")
-async def cf_access_middleware(request: Request, call_next):
-    """W produkcji wymagaj nagłówka Cf-Access-Authenticated-User-Email od Cloudflare Access.
-    Lokalnie REQUIRE_CF_ACCESS=false — pomija."""
-    if settings.REQUIRE_CF_ACCESS and request.url.path.startswith("/api/"):
-        email = request.headers.get("Cf-Access-Authenticated-User-Email")
-        if not email:
+async def auth_middleware(request: Request, call_next):
+    """W produkcji wymaga jednego z:
+    - Cf-Access-Authenticated-User-Email (Cloudflare Access) — gdy REQUIRE_CF_ACCESS=true
+    - X-API-Key zgodny z DASHBOARD_API_KEY (shared secret z Next.js proxy) — gdy REQUIRE_API_KEY=true
+    Lokalnie oba wyłączone, dostęp open."""
+    if not request.url.path.startswith("/api/"):
+        return await call_next(request)
+    if settings.REQUIRE_CF_ACCESS:
+        if not request.headers.get("Cf-Access-Authenticated-User-Email"):
             raise HTTPException(status_code=401, detail="Missing Cloudflare Access identity")
+    if settings.REQUIRE_API_KEY:
+        if not settings.DASHBOARD_API_KEY:
+            raise HTTPException(status_code=500, detail="API key required but DASHBOARD_API_KEY not configured")
+        if request.headers.get("X-API-Key") != settings.DASHBOARD_API_KEY:
+            raise HTTPException(status_code=401, detail="Invalid or missing X-API-Key")
     return await call_next(request)
 
 

@@ -1,4 +1,9 @@
-/* Fetch helper. credentials: 'include' żeby Cloudflare Access cookie szło do api.salespros.app. */
+/* Server-side fetch helper. Używany TYLKO w Server Components / Route Handlers.
+   API_BASE i DASHBOARD_API_KEY są server-side env (NIE NEXT_PUBLIC_), więc
+   secret nigdy nie wycieka do browsera. Browser woła backend tylko przez
+   /api/proxy/[...path] (Route Handler chroni X-API-Key + sprawdza session). */
+import "server-only";
+
 import type {
   AdsetsResponse,
   CampaignsResponse,
@@ -8,8 +13,9 @@ import type {
   OverviewResponse,
 } from "./types";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://127.0.0.1:8000";
-const PREFER_LIVE_DEFAULT = process.env.NEXT_PUBLIC_PREFER_LIVE !== "false";
+const API_BASE = process.env.API_BASE || "http://127.0.0.1:8000";
+const API_KEY = process.env.DASHBOARD_API_KEY || "";
+const PREFER_LIVE_DEFAULT = process.env.PREFER_LIVE !== "false";
 
 export interface RangeFilters {
   from: string;
@@ -36,10 +42,9 @@ function buildQuery(filters: RangeFilters): string {
 
 async function get<T>(path: string, filters: RangeFilters): Promise<T> {
   const url = `${API_BASE}${path}?${buildQuery(filters)}`;
-  const res = await fetch(url, {
-    credentials: "include",
-    cache: "no-store",
-  });
+  const headers: Record<string, string> = {};
+  if (API_KEY) headers["X-API-Key"] = API_KEY;
+  const res = await fetch(url, { headers, cache: "no-store" });
   if (!res.ok) {
     throw new Error(`API ${path} ${res.status}: ${await res.text()}`);
   }
@@ -54,11 +59,4 @@ export const api = {
   creativeDetail: (ad_id: string, f: RangeFilters) =>
     get<CreativeDetailResponse>(`/api/creatives/${encodeURIComponent(ad_id)}`, f),
   funnel: (f: RangeFilters) => get<FunnelResponse>("/api/funnel", f),
-  refresh: async () => {
-    const res = await fetch(`${API_BASE}/api/refresh`, {
-      method: "POST",
-      credentials: "include",
-    });
-    return res.json();
-  },
 };

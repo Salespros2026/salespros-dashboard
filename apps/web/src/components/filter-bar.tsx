@@ -13,7 +13,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
-import { api } from "@/lib/api";
 import { PRESET_LABELS, type RangePreset, rangeForPreset } from "@/lib/date-presets";
 import { DEFAULT_TZ, parseFilters } from "@/lib/filters";
 
@@ -64,7 +63,7 @@ export function FilterBar({ lastUpdated }: { lastUpdated?: string | null }) {
   const onBrand = (brand: string) => updateParams({ brand: brand === "all" ? undefined : brand });
 
   const onRefresh = async () => {
-    await api.refresh();
+    await fetch("/api/proxy/refresh", { method: "POST" });
     router.refresh();
   };
 

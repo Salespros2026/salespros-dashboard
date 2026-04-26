@@ -35,6 +35,10 @@ class Settings(BaseSettings):
     CF_ACCESS_TEAM_DOMAIN: str | None = None
     CF_ACCESS_AUDIENCE: str | None = None
 
+    # X-API-Key shared secret (alternatywa do Cloudflare Access)
+    DASHBOARD_API_KEY: str | None = None
+    REQUIRE_API_KEY: bool = False
+
     # Snapshots fallback
     SNAPSHOTS_DIR: str = ""
 
