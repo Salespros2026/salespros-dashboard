@@ -63,12 +63,13 @@ def sum_lead_actions(actions: list[dict] | None) -> int:
 
 # ---------- Live vs snapshot ----------
 
-def get_meta_data(from_date: str, to_date: str, prefer_live: bool = True) -> dict:
-    """Zwraca strukturę zgodną z snapshotem Meta. Próbuje live, fallback snapshot."""
+def get_meta_data(from_date: str, to_date: str, prefer_live: bool = True, full: bool = False) -> dict:
+    """Zwraca strukturę zgodną z snapshotem Meta. Próbuje live, fallback snapshot.
+    full=True: pobiera też adsets/ads/creatives (potrzebne dla /adsets i /creatives)."""
     if prefer_live:
         try:
             from .meta_client import build_meta_snapshot_like
-            return build_meta_snapshot_like(since=from_date, until=to_date)
+            return build_meta_snapshot_like(since=from_date, until=to_date, full=full)
         except Exception as e:
             log.warning("Live Meta fetch failed (%s) — fallback snapshot", e)
     from .snapshot_loader import load_meta_snapshot
@@ -213,12 +214,12 @@ def cache_key(*parts: object) -> str:
     return "|".join(str(p) for p in parts)
 
 
-def get_attribution(from_date: str, to_date: str, prefer_live: bool = True) -> dict:
-    key = cache_key("attr", from_date, to_date, "live" if prefer_live else "snap")
+def get_attribution(from_date: str, to_date: str, prefer_live: bool = True, full: bool = False) -> dict:
+    key = cache_key("attr", from_date, to_date, "live" if prefer_live else "snap", "full" if full else "lite")
     hit = cache().get(key)
     if hit is not None:
         return hit
-    meta = get_meta_data(from_date, to_date, prefer_live=prefer_live)
+    meta = get_meta_data(from_date, to_date, prefer_live=prefer_live, full=full)
     ghl = get_ghl_data(prefer_live=prefer_live)
     if not meta or not ghl:
         return {"error": "no data", "from": from_date, "to": to_date}

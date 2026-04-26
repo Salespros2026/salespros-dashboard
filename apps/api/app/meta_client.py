@@ -135,23 +135,34 @@ def fetch_creatives_by_ad_id(ad_ids: list[str]) -> dict[str, dict]:
     return out
 
 
-def build_meta_snapshot_like(since: str, until: str) -> dict:
-    """Buduje strukturę zgodną z `snapshots/YYYY-MM-DD.json` żeby reuse-ować attribution.py
-    bez modyfikacji."""
+def build_meta_snapshot_like(since: str, until: str, full: bool = False) -> dict:
+    """Buduje strukturę zgodną z `snapshots/YYYY-MM-DD.json`.
+
+    full=False (default): pobiera tylko insights (account/campaign/ad) + campaigns.
+      Wystarczy dla overview, campaigns, funnel. Oszczędza rate limit.
+    full=True: pobiera też adsets, ads×1000, creatives.
+      Potrzebne dla /adsets i /creatives.
+    """
     account_info = fetch_account_info()
     campaigns = fetch_campaigns()
-    adsets = fetch_adsets()
-    ads = fetch_ads()
+
     insights = {
         "account": fetch_insights("account", since, until),
         "campaign": fetch_insights("campaign", since, until),
         "adset": fetch_insights("adset", since, until),
         "ad": fetch_insights("ad", since, until),
     }
-    ad_ids = [a["id"] for a in ads]
-    # Creatives — pobieramy tylko dla adów które miały spend (oszczędność rate limitu)
-    spending_ad_ids = {ins.get("ad_id") for ins in insights["ad"] if float(ins.get("spend", 0) or 0) > 0}
-    creatives_by_ad_id = fetch_creatives_by_ad_id(list(spending_ad_ids))
+
+    if full:
+        adsets = fetch_adsets()
+        ads = fetch_ads()
+        spending_ad_ids = {ins.get("ad_id") for ins in insights["ad"] if float(ins.get("spend", 0) or 0) > 0}
+        creatives_by_ad_id = fetch_creatives_by_ad_id(list(spending_ad_ids))
+    else:
+        adsets = []
+        ads = []
+        creatives_by_ad_id = {}
+
     return {
         "snapshot_date": until,
         "ad_account_id": account_info.get("id"),

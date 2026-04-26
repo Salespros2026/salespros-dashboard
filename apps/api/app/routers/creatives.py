@@ -26,7 +26,7 @@ def creatives(
     campaign_id: str | None = Query(None),
     prefer_live: bool = Query(True),
 ):
-    agg = get_attribution(from_, to, prefer_live=prefer_live)
+    agg = get_attribution(from_, to, prefer_live=prefer_live, full=True)
     if agg.get("error"):
         return CreativesResponse(creatives=[], avg_real_cpl=None)
 
@@ -113,7 +113,7 @@ def creative_detail(
     to: str = Query(...),
     prefer_live: bool = Query(True),
 ):
-    agg = get_attribution(from_, to, prefer_live=prefer_live)
+    agg = get_attribution(from_, to, prefer_live=prefer_live, full=True)
     if agg.get("error"):
         raise HTTPException(404, "No data")
     meta = agg["_meta_raw"]

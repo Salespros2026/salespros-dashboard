@@ -18,7 +18,7 @@ def adsets(
     campaign_id: str | None = Query(None),
     prefer_live: bool = Query(True),
 ):
-    agg = get_attribution(from_, to, prefer_live=prefer_live)
+    agg = get_attribution(from_, to, prefer_live=prefer_live, full=True)
     if agg.get("error"):
         return AdsetsResponse(adsets=[])
 
