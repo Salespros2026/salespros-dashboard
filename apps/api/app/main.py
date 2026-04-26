@@ -4,8 +4,9 @@ from __future__ import annotations
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request, HTTPException
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from .deps import get_settings
 from .routers import overview, campaigns, adsets, creatives, funnel, refresh
@@ -46,12 +47,14 @@ async def auth_middleware(request: Request, call_next):
         return await call_next(request)
     if settings.REQUIRE_CF_ACCESS:
         if not request.headers.get("Cf-Access-Authenticated-User-Email"):
-            raise HTTPException(status_code=401, detail="Missing Cloudflare Access identity")
+            return JSONResponse({"detail": "Missing Cloudflare Access identity"}, status_code=401)
     if settings.REQUIRE_API_KEY:
         if not settings.DASHBOARD_API_KEY:
-            raise HTTPException(status_code=500, detail="API key required but DASHBOARD_API_KEY not configured")
+            return JSONResponse(
+                {"detail": "API key required but DASHBOARD_API_KEY not configured"}, status_code=500,
+            )
         if request.headers.get("X-API-Key") != settings.DASHBOARD_API_KEY:
-            raise HTTPException(status_code=401, detail="Invalid or missing X-API-Key")
+            return JSONResponse({"detail": "Invalid or missing X-API-Key"}, status_code=401)
     return await call_next(request)
 
 
