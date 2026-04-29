@@ -14,6 +14,15 @@ export interface CplSplit {
   cpl_acquisition: number | null;
   cpl_retarget: number | null;
   untagged_count: number;
+  // CPA/ROAS split (sales-based)
+  sales_acquisition: number;
+  sales_retarget: number;
+  revenue_acquisition: number;
+  revenue_retarget: number;
+  cpa_acquisition: number | null;
+  cpa_retarget: number | null;
+  roas_acquisition: number | null;
+  roas_retarget: number | null;
 }
 
 export interface TrendPoint {
@@ -41,6 +50,9 @@ export interface OverviewResponse {
   last_updated_iso: string;
   data_source: string;
   split: CplSplit | null;
+  revenue: number;
+  cpa: number | null;
+  roas: number | null;
 }
 
 export interface CampaignRow {
@@ -62,6 +74,9 @@ export interface CampaignRow {
   meta_cpl: number | null;
   bookings: number;
   sales: number;
+  revenue: number;
+  cpa: number | null;
+  roas: number | null;
   daily_budget: number | null;
 }
 
@@ -84,6 +99,11 @@ export interface AdsetRow {
   meta_leads: number;
   ghl_leads: number;
   real_cpl: number | null;
+  bookings: number;
+  sales: number;
+  revenue: number;
+  cpa: number | null;
+  roas: number | null;
 }
 
 export interface AdsetsResponse {
@@ -111,6 +131,9 @@ export interface CreativeRow {
   meta_cpl: number | null;
   bookings: number;
   sales: number;
+  revenue: number;
+  cpa: number | null;
+  roas: number | null;
   hook_rate: number | null;
   winner_badge: boolean;
   loser_badge: boolean;

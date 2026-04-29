@@ -72,6 +72,9 @@ def campaigns(
             meta_cpl=camp_agg.get("meta_cpl"),
             bookings=camp_agg.get("bookings", 0),
             sales=camp_agg.get("sales", 0),
+            revenue=camp_agg.get("revenue_pln", 0.0),
+            cpa=camp_agg.get("cpa"),
+            roas=camp_agg.get("roas"),
             daily_budget=db,
         ))
 

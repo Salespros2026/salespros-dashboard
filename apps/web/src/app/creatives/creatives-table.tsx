@@ -85,6 +85,26 @@ const columns: ColumnDef<CreativeRow>[] = [
     },
   },
   { accessorKey: "bookings", header: "Bookingi", cell: ({ getValue }) => fInt(getValue<number>()) },
+  { accessorKey: "sales", header: "Sales", cell: ({ getValue }) => fInt(getValue<number>()) },
+  {
+    accessorKey: "revenue",
+    header: "Revenue",
+    cell: ({ getValue }) => {
+      const v = getValue<number>();
+      return <span className={v > 0 ? "text-emerald-300" : "text-muted-foreground"}>{fPln(v || null)}</span>;
+    },
+  },
+  { accessorKey: "cpa", header: "CPA", cell: ({ getValue }) => fPln(getValue<number | null>()) },
+  {
+    accessorKey: "roas",
+    header: "ROAS",
+    cell: ({ getValue }) => {
+      const v = getValue<number | null>();
+      if (v == null) return <span className="text-muted-foreground">—</span>;
+      const color = v >= 3 ? "text-emerald-400" : v >= 1.5 ? "text-amber-400" : "text-rose-400";
+      return <span className={color}>{v.toFixed(2)}×</span>;
+    },
+  },
   { accessorKey: "ctr", header: "CTR", cell: ({ getValue }) => fPct(getValue<number>()) },
   {
     accessorKey: "frequency",

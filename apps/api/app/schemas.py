@@ -28,6 +28,15 @@ class CplSplit(BaseModel):
     cpl_acquisition: float | None
     cpl_retarget: float | None
     untagged_count: int  # ile kampanii ma campaign_type=="unknown" (do bannera)
+    # CPA/ROAS split (faza 2 — sales-based)
+    sales_acquisition: int = 0
+    sales_retarget: int = 0
+    revenue_acquisition: float = 0.0
+    revenue_retarget: float = 0.0
+    cpa_acquisition: float | None = None
+    cpa_retarget: float | None = None
+    roas_acquisition: float | None = None
+    roas_retarget: float | None = None
 
 
 class OverviewResponse(BaseModel):
@@ -47,6 +56,10 @@ class OverviewResponse(BaseModel):
     last_updated_iso: str
     data_source: str  # "live" | "snapshot"
     split: CplSplit | None = None
+    # Top-level money metrics (sales-based, faza 2)
+    revenue: float = 0.0
+    cpa: float | None = None  # spend / sales (zamknięte sprzedaże)
+    roas: float | None = None  # revenue / spend
 
     model_config = {"populate_by_name": True}
 
@@ -70,6 +83,9 @@ class CampaignRow(BaseModel):
     meta_cpl: float | None
     bookings: int
     sales: int
+    revenue: float = 0.0
+    cpa: float | None = None
+    roas: float | None = None
     daily_budget: float | None = None
 
 
@@ -92,6 +108,11 @@ class AdsetRow(BaseModel):
     meta_leads: int
     ghl_leads: int
     real_cpl: float | None
+    bookings: int = 0
+    sales: int = 0
+    revenue: float = 0.0
+    cpa: float | None = None
+    roas: float | None = None
 
 
 class AdsetsResponse(BaseModel):
@@ -119,6 +140,9 @@ class CreativeRow(BaseModel):
     meta_cpl: float | None
     bookings: int
     sales: int
+    revenue: float = 0.0
+    cpa: float | None = None
+    roas: float | None = None
     hook_rate: float | None = None  # video_p25 / impressions
     winner_badge: bool = False
     loser_badge: bool = False

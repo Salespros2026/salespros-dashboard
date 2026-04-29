@@ -87,6 +87,9 @@ def creatives(
             meta_cpl=(spend / meta_leads) if meta_leads else None,
             bookings=ghl_row.get("bookings", 0),
             sales=ghl_row.get("sales", 0),
+            revenue=ghl_row.get("revenue_pln", 0.0),
+            cpa=ghl_row.get("cpa"),
+            roas=ghl_row.get("roas"),
             hook_rate=hook_rate,
         ))
 

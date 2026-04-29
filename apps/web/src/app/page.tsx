@@ -117,6 +117,36 @@ async function OverviewContent({ filters }: { filters: ReturnType<typeof parseFi
         </Card>
       )}
 
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <KpiCard
+          label="ROAS"
+          value={data.roas == null ? "—" : `${data.roas.toFixed(2)}×`}
+          subtitle={split ? `ACQ: ${split.roas_acquisition == null ? "—" : split.roas_acquisition.toFixed(2) + "×"} | RTG: ${split.roas_retarget == null ? "—" : split.roas_retarget.toFixed(2) + "×"}` : `Revenue: ${fPln(data.revenue)}`}
+          tooltip="Return on Ad Spend = revenue z zamkniętych sprzedaży / spend. ROAS 1× = wychodzimy na zero, 3× = 3 zł revenue na każdą złotówkę reklamy."
+          highlight={
+            data.roas == null ? undefined : data.roas >= 3 ? "success" : data.roas >= 1.5 ? "warning" : "danger"
+          }
+        />
+        <KpiCard
+          label="CPA"
+          value={fPln(data.cpa)}
+          subtitle={split ? `ACQ: ${fPln(split.cpa_acquisition)} | RTG: ${fPln(split.cpa_retarget)}` : `${data.sales} sprzedaży`}
+          tooltip='CPA = spend / liczba zamkniętych sprzedaży (stage "Nowy klient" + "Opłacony START"). Pokazuje koszt pozyskania klienta, nie tylko leada.'
+        />
+        <KpiCard
+          label="Revenue"
+          value={fPln(data.revenue)}
+          subtitle={split ? `ACQ: ${fPln(split.revenue_acquisition)} | RTG: ${fPln(split.revenue_retarget)}` : `${data.sales} sprzedaży`}
+          tooltip="Suma monetaryValue z opportunities zamkniętych jako sprzedaż w wybranym zakresie dat."
+        />
+        <KpiCard
+          label="Sprzedaże"
+          value={fInt(data.sales)}
+          subtitle={split ? `ACQ: ${fInt(split.sales_acquisition)} | RTG: ${fInt(split.sales_retarget)}` : "—"}
+          tooltip='Liczba zamkniętych sprzedaży (opportunity w "Nowy klient" lub "Opłacony START").'
+        />
+      </div>
+
       <Card>
         <CardHeader>
           <CardTitle className="text-base flex items-center justify-between">

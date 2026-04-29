@@ -121,6 +121,8 @@ def overview(
 
     spend_by_type = {"acquisition": 0.0, "retarget": 0.0, "unknown": 0.0}
     leads_by_type = {"acquisition": 0, "retarget": 0, "unknown": 0}
+    sales_by_type = {"acquisition": 0, "retarget": 0, "unknown": 0}
+    revenue_by_type = {"acquisition": 0.0, "retarget": 0.0, "unknown": 0.0}
     untagged_count = 0
     for cid in cids_in_scope:
         ctype = type_by_camp.get(cid, "unknown")
@@ -133,6 +135,8 @@ def overview(
             continue
         ctype = type_by_camp.get(cid, "unknown")
         leads_by_type[ctype] = leads_by_type.get(ctype, 0) + int(row.get("leads", 0))
+        sales_by_type[ctype] = sales_by_type.get(ctype, 0) + int(row.get("sales", 0))
+        revenue_by_type[ctype] = revenue_by_type.get(ctype, 0.0) + float(row.get("revenue_pln", 0.0) or 0)
 
     split = CplSplit(
         spend_acquisition=spend_by_type["acquisition"],
@@ -144,7 +148,19 @@ def overview(
         cpl_acquisition=(spend_by_type["acquisition"] / leads_by_type["acquisition"]) if leads_by_type["acquisition"] else None,
         cpl_retarget=(spend_by_type["retarget"] / leads_by_type["retarget"]) if leads_by_type["retarget"] else None,
         untagged_count=untagged_count,
+        sales_acquisition=sales_by_type["acquisition"],
+        sales_retarget=sales_by_type["retarget"],
+        revenue_acquisition=revenue_by_type["acquisition"],
+        revenue_retarget=revenue_by_type["retarget"],
+        cpa_acquisition=(spend_by_type["acquisition"] / sales_by_type["acquisition"]) if sales_by_type["acquisition"] else None,
+        cpa_retarget=(spend_by_type["retarget"] / sales_by_type["retarget"]) if sales_by_type["retarget"] else None,
+        roas_acquisition=(revenue_by_type["acquisition"] / spend_by_type["acquisition"]) if spend_by_type["acquisition"] else None,
+        roas_retarget=(revenue_by_type["retarget"] / spend_by_type["retarget"]) if spend_by_type["retarget"] else None,
     )
+
+    # Top-level revenue + CPA + ROAS (sumy z brand-filtered scope)
+    revenue_total = revenue_by_type["acquisition"] + revenue_by_type["retarget"] + revenue_by_type["unknown"]
+    sales_total_for_cpa = sales_by_type["acquisition"] + sales_by_type["retarget"] + sales_by_type["unknown"]
 
     return OverviewResponse(
         from_=from_, to=to, tz=tz,
@@ -161,4 +177,7 @@ def overview(
         last_updated_iso=datetime.utcnow().isoformat() + "Z",
         data_source="live" if prefer_live else "snapshot",
         split=split,
+        revenue=revenue_total,
+        cpa=(spend / sales_total_for_cpa) if sales_total_for_cpa else None,
+        roas=(revenue_total / spend) if spend else None,
     )

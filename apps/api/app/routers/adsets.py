@@ -27,6 +27,19 @@ def adsets(
     campaigns_by_id = {c["id"]: c for c in meta.get("campaigns", [])}
     insights_adset = {ins.get("adset_id"): ins for ins in agg["insights_adset"]}
 
+    # Agregacja sales/bookings/revenue per adset — sumuj z per_ad pod parent adset_id
+    ad_to_adset = {ad["id"]: ad.get("adset_id") for ad in meta.get("ads", []) if ad.get("adset_id")}
+    sales_by_adset: dict[str, int] = {}
+    bookings_by_adset: dict[str, int] = {}
+    revenue_by_adset: dict[str, float] = {}
+    for ad_row in agg.get("per_ad", []):
+        asid = ad_to_adset.get(ad_row.get("ad_id"))
+        if not asid:
+            continue
+        sales_by_adset[asid] = sales_by_adset.get(asid, 0) + int(ad_row.get("sales", 0))
+        bookings_by_adset[asid] = bookings_by_adset.get(asid, 0) + int(ad_row.get("bookings", 0))
+        revenue_by_adset[asid] = revenue_by_adset.get(asid, 0.0) + float(ad_row.get("revenue_pln", 0.0) or 0)
+
     # Agregacja GHL leads per adset_id (z attribution.utmTerm)
     leads_by_adset: dict[str, int] = {}
     contacts = (agg["_ghl_raw"].get("contacts") or [])
@@ -62,6 +75,8 @@ def adsets(
             continue
         spend = float(ins.get("spend", 0) or 0)
         ghl_leads = leads_by_adset.get(asid, 0)
+        sales = sales_by_adset.get(asid, 0)
+        revenue = revenue_by_adset.get(asid, 0.0)
         rows.append(AdsetRow(
             adset_id=asid,
             name=meta_obj.get("name") or ins.get("adset_name") or asid,
@@ -77,6 +92,11 @@ def adsets(
             meta_leads=sum_lead_actions(ins.get("actions")),
             ghl_leads=ghl_leads,
             real_cpl=(spend / ghl_leads) if ghl_leads else None,
+            bookings=bookings_by_adset.get(asid, 0),
+            sales=sales,
+            revenue=revenue,
+            cpa=(spend / sales) if sales else None,
+            roas=(revenue / spend) if spend else None,
         ))
     rows.sort(key=lambda r: r.spend, reverse=True)
     return AdsetsResponse(adsets=rows)

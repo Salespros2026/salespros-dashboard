@@ -146,18 +146,20 @@ def aggregate_range(meta: dict, ghl: dict, from_date: str, to_date: str) -> dict
         totals["bookings"] += len(r["bookings_today"])
         for ad in r["per_ad"]:
             aid = ad["ad_id"]
-            row = per_ad.setdefault(aid, {**ad, "leads": 0, "bookings": 0, "sales": 0, "contacts": []})
+            row = per_ad.setdefault(aid, {**ad, "leads": 0, "bookings": 0, "sales": 0, "revenue_pln": 0.0, "contacts": []})
             row["leads"] += ad["leads"]
             row["bookings"] += ad["bookings"]
             row["sales"] += ad["sales"]
+            row["revenue_pln"] += ad.get("revenue_pln", 0.0)
             row["contacts"].extend(ad.get("contacts", []))
             totals["sales"] += ad.get("sales", 0)
         for c in r["per_campaign"]:
             cid = c["campaign_id"]
-            row = per_campaign.setdefault(cid, {**c, "leads": 0, "bookings": 0, "sales": 0})
+            row = per_campaign.setdefault(cid, {**c, "leads": 0, "bookings": 0, "sales": 0, "revenue_pln": 0.0})
             row["leads"] += c["leads"]
             row["bookings"] += c["bookings"]
             row["sales"] += c["sales"]
+            row["revenue_pln"] += c.get("revenue_pln", 0.0)
 
     # Spend dla całego range — z meta insights account-level (już agregowane przez Meta)
     insights_acct = (meta.get("insights") or {}).get("account") or []
@@ -178,6 +180,8 @@ def aggregate_range(meta: dict, ghl: dict, from_date: str, to_date: str) -> dict
         row["real_cpl"] = (row["spend"] / row["leads"]) if row["leads"] else None
         row["meta_cpl"] = (row["spend"] / row["meta_leads"]) if row["meta_leads"] else None
         row["real_cpb"] = (row["spend"] / row["bookings"]) if row["bookings"] else None
+        row["cpa"] = (row["spend"] / row["sales"]) if row["sales"] else None
+        row["roas"] = (row["revenue_pln"] / row["spend"]) if row["spend"] else None
 
     # Klasyfikacja kampanii — campaign_type per kampania (acquisition / retarget / unknown)
     from . import classifier
@@ -190,6 +194,8 @@ def aggregate_range(meta: dict, ghl: dict, from_date: str, to_date: str) -> dict
         row["real_cpl"] = (row["spend"] / row["leads"]) if row["leads"] else None
         row["meta_cpl"] = (row["spend"] / row["meta_leads"]) if row["meta_leads"] else None
         row["real_cpb"] = (row["spend"] / row["bookings"]) if row["bookings"] else None
+        row["cpa"] = (row["spend"] / row["sales"]) if row["sales"] else None
+        row["roas"] = (row["revenue_pln"] / row["spend"]) if row["spend"] else None
         camp_meta = camp_meta_by_id.get(cid) or {"id": cid, "name": row.get("campaign_name", "")}
         ctype = classifier.classify_campaign(camp_meta)
         row["campaign_type"] = ctype

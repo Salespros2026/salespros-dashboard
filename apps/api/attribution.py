@@ -179,6 +179,22 @@ def is_sold(contact_id: str, opportunities: list[dict], stage_map: dict) -> bool
     return False
 
 
+def revenue_for_contact(contact_id: str, opportunities: list[dict], stage_map: dict) -> float:
+    """Suma monetaryValue z opportunities danego contacta które są w SALE_STAGES.
+    Jeden contact może mieć kilka opp (np. upsell) — sumujemy wszystkie sold."""
+    total = 0.0
+    for o in opportunities_for_contact(opportunities, contact_id):
+        sid = o.get("pipelineStageId") or o.get("pipelineStageUId")
+        info = stage_map.get(sid, {})
+        if info.get("stage_name") not in SALE_STAGES:
+            continue
+        try:
+            total += float(o.get("monetaryValue") or 0)
+        except (TypeError, ValueError):
+            pass
+    return total
+
+
 def aggregate_attribution(meta_snapshot: dict, ghl_snapshot: dict, target_date: str) -> dict:
     """Główna funkcja — łączy Meta + GHL i zwraca agregat per-ad i per-campaign."""
     all_today = filter_contacts_for_date(ghl_snapshot["contacts"], target_date)
@@ -214,6 +230,7 @@ def aggregate_attribution(meta_snapshot: dict, ghl_snapshot: dict, target_date: 
                 "leads": 0,
                 "bookings": 0,
                 "sales": 0,
+                "revenue_pln": 0.0,
                 "contacts": [],
             }
         per_ad[ad_id]["leads"] += 1
@@ -222,6 +239,7 @@ def aggregate_attribution(meta_snapshot: dict, ghl_snapshot: dict, target_date: 
             per_ad[ad_id]["bookings"] += 1
         if is_sold(cid, opportunities, stage_map):
             per_ad[ad_id]["sales"] += 1
+            per_ad[ad_id]["revenue_pln"] += revenue_for_contact(cid, opportunities, stage_map)
         per_ad[ad_id]["contacts"].append({
             "id": cid,
             "name": ((c.get("firstName") or "") + " " + (c.get("lastName") or "")).strip() or c.get("email", ""),
@@ -252,12 +270,14 @@ def aggregate_attribution(meta_snapshot: dict, ghl_snapshot: dict, target_date: 
                 "leads": 0,
                 "bookings": 0,
                 "sales": 0,
+                "revenue_pln": 0.0,
                 "ad_count": 0,
             }
         # spend liczymy z campaign-level insights (NIE sumujemy z ad-level — bo ady mogą być z innej kampanii)
         per_campaign[cid]["leads"] += row["leads"]
         per_campaign[cid]["bookings"] += row["bookings"]
         per_campaign[cid]["sales"] += row["sales"]
+        per_campaign[cid]["revenue_pln"] += row.get("revenue_pln", 0.0)
         per_campaign[cid]["ad_count"] += 1
 
     # Spend per campaign — z meta_campaign_insights
