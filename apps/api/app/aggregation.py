@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import logging
 import sys
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date, timedelta
 from pathlib import Path
 from typing import Optional
@@ -246,8 +247,12 @@ def get_attribution(from_date: str, to_date: str, prefer_live: bool = True, full
     hit = cache().get(key)
     if hit is not None:
         return hit
-    meta = get_meta_data(from_date, to_date, prefer_live=prefer_live, full=full)
-    ghl = get_ghl_data(prefer_live=prefer_live)
+    # Parallel Meta + GHL fetch — niezależne API, ~50% speedup vs sequential.
+    with ThreadPoolExecutor(max_workers=2) as ex:
+        meta_fut = ex.submit(get_meta_data, from_date, to_date, prefer_live, full)
+        ghl_fut = ex.submit(get_ghl_data, prefer_live)
+        meta = meta_fut.result()
+        ghl = ghl_fut.result()
     if not meta or not ghl:
         return {"error": "no data", "from": from_date, "to": to_date}
     agg = aggregate_range(meta, ghl, from_date, to_date)

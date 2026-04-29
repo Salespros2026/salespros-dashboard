@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import time
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 import httpx
@@ -119,25 +120,38 @@ def get_custom_fields() -> list[dict]:
 
 
 def build_ghl_snapshot_like(days_back: int = 14) -> dict:
-    """Struktura zgodna z `snapshots/ghl-YYYY-MM-DD.json`."""
+    """Struktura zgodna z `snapshots/ghl-YYYY-MM-DD.json`.
+    Parallel fetch 5 niezależnych endpointów + calendar events per calendar."""
     s = get_settings()
-    contacts = search_contacts(days_back=days_back)
-    pipelines = get_pipelines()
-    opportunities = search_opportunities()
-    calendars = get_calendars()
-    custom_fields = get_custom_fields()
-    # Calendar events — ostatnie days_back dni
+
+    # Faza 1 — 5 endpointów równolegle (contacts, pipelines, opps, calendars, custom fields).
+    # Każdy ma swoją wewnętrzną paginację (sync), ale są niezależne od siebie.
+    with ThreadPoolExecutor(max_workers=5) as ex:
+        contacts_fut = ex.submit(search_contacts, days_back)
+        pipelines_fut = ex.submit(get_pipelines)
+        opps_fut = ex.submit(search_opportunities)
+        calendars_fut = ex.submit(get_calendars)
+        custom_fields_fut = ex.submit(get_custom_fields)
+        contacts = contacts_fut.result()
+        pipelines = pipelines_fut.result()
+        opportunities = opps_fut.result()
+        calendars = calendars_fut.result()
+        custom_fields = custom_fields_fut.result()
+
+    # Faza 2 — events per calendar równolegle (zwykle 8-12 kalendarzy).
     now_ms = int(time.time() * 1000)
     start_ms = now_ms - days_back * 86400 * 1000
     events: list[dict] = []
-    for cal in calendars:
-        cid = cal.get("id")
-        if not cid:
-            continue
-        try:
-            events.extend(get_calendar_events(cid, start_ms, now_ms))
-        except Exception as e:
-            log.warning("Calendar events fetch failed for %s: %s", cid, e)
+    cal_ids = [c.get("id") for c in calendars if c.get("id")]
+    if cal_ids:
+        with ThreadPoolExecutor(max_workers=min(10, len(cal_ids))) as ex:
+            futures = {cid: ex.submit(get_calendar_events, cid, start_ms, now_ms) for cid in cal_ids}
+            for cid, fut in futures.items():
+                try:
+                    events.extend(fut.result())
+                except Exception as e:
+                    log.warning("Calendar events fetch failed for %s: %s", cid, e)
+
     return {
         "location_id": s.GHL_LOCATION_ID,
         "days_back": days_back,
