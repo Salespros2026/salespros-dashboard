@@ -219,9 +219,15 @@ def aggregate_attribution(meta_snapshot: dict, ghl_snapshot: dict, target_date: 
     opportunities = ghl_snapshot.get("opportunities", [])
 
     # Mapowanie Meta ad_id → meta data (spend, name, etc.)
+    # Fallback dla lite mode (overview/campaigns endpointy bez full): ads jest pusta,
+    # ale insights.ad zawsze są — zbuduj map z insights jako fallback.
     meta_ad_map = {}
     for ad in meta_snapshot.get("ads", []):
         meta_ad_map[ad["id"]] = {"name": ad.get("name", "?"), "campaign_id": ad.get("campaign_id")}
+    for ins in meta_snapshot.get("insights", {}).get("ad", []):
+        ad_id = ins.get("ad_id")
+        if ad_id and ad_id not in meta_ad_map:
+            meta_ad_map[ad_id] = {"name": ins.get("ad_name", "?"), "campaign_id": ins.get("campaign_id")}
     meta_ad_insights = {ins.get("ad_id"): ins for ins in meta_snapshot.get("insights", {}).get("ad", [])}
     meta_campaign_insights = {ins.get("campaign_id"): ins for ins in meta_snapshot.get("insights", {}).get("campaign", [])}
     meta_campaign_meta = {c["id"]: c for c in meta_snapshot.get("campaigns", [])}
@@ -260,7 +266,16 @@ def aggregate_attribution(meta_snapshot: dict, ghl_snapshot: dict, target_date: 
         meta_meta = meta_ad_map.get(ad_id, {})
         ins = meta_ad_insights.get(ad_id, {})
         row["ad_name"] = meta_meta.get("name", ad_id)
-        row["meta_campaign_id"] = meta_meta.get("campaign_id")
+        # campaign_id: pierwszeństwo z Meta map (ads/insights), fallback z attribution kontaktu
+        # (utmCampaign w pierwszym contact tego ada).
+        camp_id_from_meta = meta_meta.get("campaign_id")
+        if not camp_id_from_meta and row.get("contacts"):
+            for c in paid_contacts:
+                if get_meta_ad_id(c) == ad_id:
+                    camp_id_from_meta = get_meta_campaign_id(c)
+                    if camp_id_from_meta:
+                        break
+        row["meta_campaign_id"] = camp_id_from_meta
         row["spend"] = float(ins.get("spend", 0) or 0) if ins else 0.0
         row["meta_leads_reported"] = sum(int(float(a.get("value", 0))) for a in (ins.get("actions") or []) if a.get("action_type") == "offsite_conversion.fb_pixel_custom") if ins else 0
         row["real_cpl"] = (row["spend"] / row["leads"]) if row["leads"] else None
