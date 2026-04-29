@@ -18,22 +18,24 @@ set -euo pipefail
 
 cd /root/salespros-dashboard
 
-# 1. Build API image
-echo "=== Building API image ==="
-docker build -t salespros-dashboard-api:latest ./apps/api
-
-# 2. Stop + remove old container (jeśli istnieje)
-docker stop salespros-dashboard-api 2>/dev/null || true
-docker rm salespros-dashboard-api 2>/dev/null || true
-
-# 3. Sprawdź czy .env istnieje
+# Sprawdź wymagane env files
 if [[ ! -f /root/salespros-dashboard/apps/api/.env ]]; then
 	echo "ERROR: brak /root/salespros-dashboard/apps/api/.env — skopiuj .env.example i uzupełnij"
 	exit 1
 fi
+if [[ ! -f /root/salespros-dashboard/apps/web/.env.production ]]; then
+	echo "ERROR: brak /root/salespros-dashboard/apps/web/.env.production — skopiuj .env.production.example i uzupełnij"
+	exit 1
+fi
 
-# 4. Persistent data dir dla classification kampanii (CPL split ACQ/RTG).
-#    Seedujemy z obrazu przy pierwszym deployu, potem volume przeżywa rebuilds.
+# ===== API =====
+echo "=== Building API image ==="
+docker build -t salespros-dashboard-api:latest ./apps/api
+
+docker stop salespros-dashboard-api 2>/dev/null || true
+docker rm salespros-dashboard-api 2>/dev/null || true
+
+# Persistent data dir dla classification kampanii (CPL split ACQ/RTG).
 DATA_DIR=/var/lib/salespros-dashboard/data
 mkdir -p "$DATA_DIR"
 if [[ ! -f "$DATA_DIR/campaign_classification.json" ]] && \
@@ -42,7 +44,6 @@ if [[ ! -f "$DATA_DIR/campaign_classification.json" ]] && \
 	cp /root/salespros-dashboard/apps/api/data/campaign_classification.json "$DATA_DIR/"
 fi
 
-# 5. Run new API container
 echo "=== Starting API container ==="
 docker run -d \
 	--name salespros-dashboard-api \
@@ -53,24 +54,35 @@ docker run -d \
 	--env-file /root/salespros-dashboard/apps/api/.env \
 	salespros-dashboard-api:latest
 
-# 5. Caddy (tylko pierwsze uruchomienie — sprawdź czy już działa)
-if ! docker ps --format '{{.Names}}' | grep -q '^caddy$'; then
-	echo "=== Starting Caddy reverse proxy ==="
-	docker run -d \
-		--name caddy \
-		--restart always \
-		--network n8n_default \
-		-p 80:80 -p 443:443 \
-		-v /root/salespros-dashboard/deploy/Caddyfile:/etc/caddy/Caddyfile:ro \
-		-v caddy_data:/data \
-		-v caddy_config:/config \
-		caddy:2-alpine
+# ===== WEB =====
+echo "=== Building WEB image (może zająć 2-4 min — Next.js build) ==="
+docker build -t salespros-dashboard-web:latest ./apps/web
+
+docker stop salespros-dashboard-web 2>/dev/null || true
+docker rm salespros-dashboard-web 2>/dev/null || true
+
+echo "=== Starting WEB container ==="
+docker run -d \
+	--name salespros-dashboard-web \
+	--restart always \
+	--network n8n_default \
+	--env-file /root/salespros-dashboard/apps/web/.env.production \
+	salespros-dashboard-web:latest
+
+# ===== Caddy reload =====
+# Caddy chodzi niezależnie z n8n stacku, mount /root/n8n/Caddyfile.
+# Edycja config: ssh openclaw, vim /root/n8n/Caddyfile, ten skrypt reloaduje.
+if docker ps --format '{{.Names}}' | grep -q '^caddy$'; then
+	echo "=== Reloading Caddy config ==="
+	docker exec caddy caddy reload --config /etc/caddy/Caddyfile || \
+		echo "WARN: Caddy reload failed (config może być invalid). Sprawdź: docker exec caddy caddy validate --config /etc/caddy/Caddyfile"
 else
-	echo "=== Caddy already running, reload config ==="
-	docker exec caddy caddy reload --config /etc/caddy/Caddyfile
+	echo "WARN: Caddy nie chodzi. Web container będzie dostępny tylko wewnątrz n8n_default network."
 fi
 
 echo "=== Deploy complete ==="
-echo "Logs API:  docker logs -f salespros-dashboard-api"
+echo "Logs API: docker logs -f salespros-dashboard-api"
+echo "Logs WEB: docker logs -f salespros-dashboard-web"
 echo "Logs Caddy: docker logs -f caddy"
-echo "Health: curl https://api.salespros.app/healthz"
+echo "Health API:  curl https://api.salespros.pl/healthz"
+echo "Health WEB:  curl -I https://dashboard.salespros.pl/login (po DNS prop)"

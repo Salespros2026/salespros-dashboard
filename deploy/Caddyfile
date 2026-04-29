@@ -1,35 +1,37 @@
-# Caddy reverse proxy dla salespros-dashboard backend.
-# Lokalizacja: /root/salespros-dashboard/deploy/Caddyfile na openclaw.
+# Reference snapshot aktywnego Caddy config na openclaw.
+# UWAGA: live config jest w /root/n8n/Caddyfile (NIE ten plik). Caddy container
+# mount'uje stamtąd. Ten plik trzymamy w repo żeby śledzić strukturę i zmiany.
+# Po edycji live: docker exec caddy caddy reload --config /etc/caddy/Caddyfile
 #
-# Caddy automatycznie wystawia Let's Encrypt SSL dla api.salespros.app
-# (DNS musi pointować CNAME → openclaw IP lub A → 159.69.34.23).
-#
-# Run:
-#   docker run -d --name caddy --restart always \
-#     --network n8n_default \
-#     -p 80:80 -p 443:443 \
-#     -v /root/salespros-dashboard/deploy/Caddyfile:/etc/caddy/Caddyfile:ro \
-#     -v caddy_data:/data \
-#     -v caddy_config:/config \
-#     caddy:2-alpine
+# Wszystkie domeny .salespros.pl są A → 159.69.34.23 (openclaw Hetzner).
+# Caddy automatycznie wystawia Let's Encrypt SSL dla każdej.
 
-api.salespros.app {
-	# CORS dla Vercel frontend (jeśli kiedyś browser wywoła bezpośrednio)
-	@cors {
-		header Origin https://dashboard.salespros.pl
+n8n.salespros.pl {
+	reverse_proxy n8n:5678
+}
+
+bot.salespros.pl {
+	reverse_proxy salespros-bot:3000
+}
+
+setter.salespros.pl {
+	handle /api/* {
+		reverse_proxy ig-setter-backend:8000
 	}
-	header @cors Access-Control-Allow-Origin "https://dashboard.salespros.pl"
-	header @cors Access-Control-Allow-Credentials "true"
-
-	# Forward do FastAPI containera w sieci n8n_default
-	reverse_proxy salespros-dashboard-api:8000 {
-		header_up X-Forwarded-Host {host}
-		header_up X-Real-IP {remote_host}
+	handle /webhook/* {
+		reverse_proxy ig-setter-backend:8000
 	}
+	handle {
+		reverse_proxy ig-setter-frontend:3000
+	}
+}
 
+api.salespros.pl {
+	reverse_proxy salespros-dashboard-api:8000
 	encode gzip
-	log {
-		output stdout
-		format json
-	}
+}
+
+dashboard.salespros.pl {
+	reverse_proxy salespros-dashboard-web:3000
+	encode gzip
 }

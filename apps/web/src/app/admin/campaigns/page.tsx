@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Suspense } from "react";
 import { ArrowLeft } from "lucide-react";
 
 import { FilterBar } from "@/components/filter-bar";
@@ -34,7 +35,9 @@ async function AdminContent() {
 export default function Page() {
   return (
     <>
-      <FilterBar />
+      <Suspense fallback={null}>
+        <FilterBar />
+      </Suspense>
       <div className="px-6 py-6 space-y-6">
         <div className="flex items-center gap-3">
           <Button asChild variant="ghost" size="sm">
