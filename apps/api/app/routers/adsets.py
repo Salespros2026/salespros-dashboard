@@ -46,11 +46,11 @@ def adsets(
     from datetime import date
     from_d = date.fromisoformat(from_)
     to_d = date.fromisoformat(to)
+    from attribution import get_meta_adset_id  # noqa: E402
     for c in contacts:
         if not c.get("email") and not c.get("phone"):
             continue
-        attr_src = c.get("attributionSource") or c.get("lastAttributionSource") or {}
-        adset_id = attr_src.get("utmTerm")
+        adset_id = get_meta_adset_id(c)
         if not adset_id:
             continue
         # filter po dacie

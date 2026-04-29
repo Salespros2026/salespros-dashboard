@@ -60,18 +60,32 @@ def is_real_lead(contact: dict) -> bool:
     return False
 
 
+def _attr_sources(contact: dict) -> list[dict]:
+    """Zwraca wszystkie attribution objects danego kontaktu.
+    GHL nowy format: lista pod kluczem `attributions`. Stary format (deprecated):
+    `attributionSource` + `lastAttributionSource` jako dict.
+    Sprawdzamy oba dla compatibility."""
+    out: list[dict] = []
+    arr = contact.get("attributions")
+    if isinstance(arr, list):
+        out.extend(a for a in arr if isinstance(a, dict))
+    for key in ("attributionSource", "lastAttributionSource"):
+        a = contact.get(key)
+        if isinstance(a, dict) and a:
+            out.append(a)
+    return out
+
+
 def is_paid_social(contact: dict) -> bool:
     """Czy kontakt przyszedł z Meta Ads (paid social)?"""
-    attr = contact.get("attributionSource") or {}
-    last_attr = contact.get("lastAttributionSource") or {}
-    for a in (attr, last_attr):
-        if not isinstance(a, dict):
-            continue
-        if a.get("sessionSource") == "Paid Social":
+    for a in _attr_sources(contact):
+        # nowy format: utmSessionSource. stary: sessionSource.
+        if a.get("utmSessionSource") == "Paid Social" or a.get("sessionSource") == "Paid Social":
             return True
-        if a.get("utmSource", "").lower() in ("facebook", "ig", "instagram"):
-            if a.get("utmMedium", "").lower() == "paid":
-                return True
+        src = (a.get("utmSource") or "").lower()
+        med = (a.get("utmMedium") or "").lower()
+        if src in ("facebook", "ig", "instagram") and med == "paid":
+            return True
     return False
 
 
@@ -79,43 +93,37 @@ def is_organic_instagram(contact: dict) -> bool:
     """Kontakt z organic Instagram (Reels, posts, DM)?"""
     if is_paid_social(contact):
         return False
-    attr = contact.get("attributionSource") or {}
-    if isinstance(attr, dict):
-        if attr.get("medium") == "instagram":
+    for a in _attr_sources(contact):
+        if a.get("medium") == "instagram":
             return True
-        if attr.get("sessionSource") == "Social media" and attr.get("medium") == "instagram":
+        if a.get("sessionSource") == "Social media" and a.get("medium") == "instagram":
             return True
     return False
 
 
 def get_meta_ad_id(contact: dict) -> str | None:
     """Wyciąga Meta ad ID (utmContent) z kontaktu."""
-    for key in ("attributionSource", "lastAttributionSource"):
-        a = contact.get(key) or {}
-        if isinstance(a, dict):
-            ad_id = a.get("utmContent")
-            if ad_id:
-                return str(ad_id)
+    for a in _attr_sources(contact):
+        ad_id = a.get("utmContent")
+        if ad_id:
+            return str(ad_id)
     return None
 
 
 def get_meta_campaign_id(contact: dict) -> str | None:
-    for key in ("attributionSource", "lastAttributionSource"):
-        a = contact.get(key) or {}
-        if isinstance(a, dict):
-            cid = a.get("campaign")
-            if cid:
-                return str(cid)
+    """Wyciąga Meta campaign ID. Nowy format: utmCampaign. Stary: campaign."""
+    for a in _attr_sources(contact):
+        cid = a.get("utmCampaign") or a.get("campaign")
+        if cid:
+            return str(cid)
     return None
 
 
 def get_meta_adset_id(contact: dict) -> str | None:
-    for key in ("attributionSource", "lastAttributionSource"):
-        a = contact.get(key) or {}
-        if isinstance(a, dict):
-            sid = a.get("utmTerm")
-            if sid:
-                return str(sid)
+    for a in _attr_sources(contact):
+        sid = a.get("utmTerm")
+        if sid:
+            return str(sid)
     return None
 
 
