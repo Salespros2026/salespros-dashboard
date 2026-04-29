@@ -5,6 +5,7 @@
 import "server-only";
 
 import type {
+  AdminCampaignsResponse,
   AdsetsResponse,
   CampaignsResponse,
   CreativeDetailResponse,
@@ -44,10 +45,19 @@ async function get<T>(path: string, filters: RangeFilters): Promise<T> {
   const url = `${API_BASE}${path}?${buildQuery(filters)}`;
   const headers: Record<string, string> = {};
   if (API_KEY) headers["X-API-Key"] = API_KEY;
-  const res = await fetch(url, { headers, cache: "no-store" });
+  const res = await fetch(url, { headers, next: { revalidate: 60 } });
   if (!res.ok) {
     throw new Error(`API ${path} ${res.status}: ${await res.text()}`);
   }
+  return res.json() as Promise<T>;
+}
+
+async function getNoFilters<T>(path: string): Promise<T> {
+  const url = `${API_BASE}${path}`;
+  const headers: Record<string, string> = {};
+  if (API_KEY) headers["X-API-Key"] = API_KEY;
+  const res = await fetch(url, { headers, cache: "no-store" });
+  if (!res.ok) throw new Error(`API ${path} ${res.status}: ${await res.text()}`);
   return res.json() as Promise<T>;
 }
 
@@ -59,4 +69,5 @@ export const api = {
   creativeDetail: (ad_id: string, f: RangeFilters) =>
     get<CreativeDetailResponse>(`/api/creatives/${encodeURIComponent(ad_id)}`, f),
   funnel: (f: RangeFilters) => get<FunnelResponse>("/api/funnel", f),
+  adminCampaigns: () => getNoFilters<AdminCampaignsResponse>("/api/admin/campaigns"),
 };

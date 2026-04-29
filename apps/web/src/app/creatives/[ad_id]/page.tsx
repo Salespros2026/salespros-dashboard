@@ -12,7 +12,7 @@ import { api } from "@/lib/api";
 import { fDateTime } from "@/lib/format";
 import { filtersToQueryString, parseFilters } from "@/lib/filters";
 
-export const dynamic = "force-dynamic";
+export const revalidate = 60;
 
 interface Props {
   params: Promise<{ ad_id: string }>;

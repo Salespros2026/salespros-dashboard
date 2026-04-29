@@ -32,13 +32,24 @@ if [[ ! -f /root/salespros-dashboard/apps/api/.env ]]; then
 	exit 1
 fi
 
-# 4. Run new API container
+# 4. Persistent data dir dla classification kampanii (CPL split ACQ/RTG).
+#    Seedujemy z obrazu przy pierwszym deployu, potem volume przeżywa rebuilds.
+DATA_DIR=/var/lib/salespros-dashboard/data
+mkdir -p "$DATA_DIR"
+if [[ ! -f "$DATA_DIR/campaign_classification.json" ]] && \
+   [[ -f /root/salespros-dashboard/apps/api/data/campaign_classification.json ]]; then
+	echo "=== Seeding classification volume from repo ==="
+	cp /root/salespros-dashboard/apps/api/data/campaign_classification.json "$DATA_DIR/"
+fi
+
+# 5. Run new API container
 echo "=== Starting API container ==="
 docker run -d \
 	--name salespros-dashboard-api \
 	--restart always \
 	--network n8n_default \
 	-v /root/salespros-os-snapshots:/app/snapshots:ro \
+	-v "$DATA_DIR":/app/data \
 	--env-file /root/salespros-dashboard/apps/api/.env \
 	salespros-dashboard-api:latest
 

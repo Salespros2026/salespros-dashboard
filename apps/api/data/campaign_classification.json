@@ -1,0 +1,27 @@
+{
+  "auto_rules": {
+    "name_contains": {
+      "Hammer": "retarget",
+      "RTG": "retarget",
+      "Retarget": "retarget",
+      "30D rolling": "retarget",
+      "Booked Calls": "retarget",
+      "Engagement": "retarget",
+      "Warm": "retarget",
+      "TOF": "acquisition",
+      "ACQ": "acquisition",
+      "Cold": "acquisition",
+      "Lookalike": "acquisition",
+      "LLA": "acquisition",
+      "VSL": "acquisition"
+    },
+    "objective_fallback": {
+      "OUTCOME_LEADS": "acquisition",
+      "OUTCOME_SALES": "acquisition",
+      "OUTCOME_TRAFFIC": "acquisition",
+      "OUTCOME_ENGAGEMENT": "retarget",
+      "OUTCOME_AWARENESS": "retarget"
+    }
+  },
+  "manual": {}
+}

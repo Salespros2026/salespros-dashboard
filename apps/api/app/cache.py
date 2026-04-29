@@ -26,13 +26,12 @@ class TTLCache:
                 return None
             return val
 
-    def set(self, key: str, val: Any) -> None:
+    def set(self, key: str, val: Any, ttl: int | None = None) -> None:
         with self._lock:
             if len(self._store) >= self._max:
-                # Drop najstarszy expiry
                 oldest = min(self._store.items(), key=lambda kv: kv[1][0])[0]
                 self._store.pop(oldest, None)
-            self._store[key] = (time.time() + self._ttl, val)
+            self._store[key] = (time.time() + (ttl if ttl is not None else self._ttl), val)
 
     def invalidate(self, prefix: str | None = None) -> int:
         with self._lock:

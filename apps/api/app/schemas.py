@@ -18,6 +18,18 @@ class TrendPoint(BaseModel):
     bookings: int
 
 
+class CplSplit(BaseModel):
+    spend_acquisition: float
+    spend_retarget: float
+    spend_unknown: float
+    leads_acquisition: int
+    leads_retarget: int
+    leads_unknown: int
+    cpl_acquisition: float | None
+    cpl_retarget: float | None
+    untagged_count: int  # ile kampanii ma campaign_type=="unknown" (do bannera)
+
+
 class OverviewResponse(BaseModel):
     from_: str
     to: str
@@ -34,6 +46,7 @@ class OverviewResponse(BaseModel):
     daily_trend: list[TrendPoint]
     last_updated_iso: str
     data_source: str  # "live" | "snapshot"
+    split: CplSplit | None = None
 
     model_config = {"populate_by_name": True}
 
@@ -44,6 +57,8 @@ class CampaignRow(BaseModel):
     brand: str
     status: str
     objective: str | None = None
+    campaign_type: str = "unknown"  # acquisition | retarget | unknown
+    is_manual_type: bool = False  # czy tag pochodzi z manual override (true) czy z auto-rules (false)
     spend: float
     impressions: int
     ctr: float
@@ -156,3 +171,29 @@ class FunnelResponse(BaseModel):
 class RefreshResponse(BaseModel):
     invalidated_keys: int
     snapshot_triggered: bool
+
+
+class AdminCampaignRow(BaseModel):
+    campaign_id: str
+    name: str
+    objective: str | None = None
+    status: str
+    spend_30d: float
+    campaign_type: str  # acquisition | retarget | unknown
+    is_manual: bool  # czy aktualnie z manual override
+    suggested_type: str  # sugestia z auto-rules (do podglądu)
+
+
+class AdminCampaignsResponse(BaseModel):
+    campaigns: list[AdminCampaignRow]
+    untagged_count: int
+
+
+class AdminSetTypeRequest(BaseModel):
+    type: str  # "acquisition" | "retarget" — walidacja w handlerze
+
+
+class AdminSetTypeResponse(BaseModel):
+    campaign_id: str
+    campaign_type: str
+    is_manual: bool

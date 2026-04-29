@@ -5,7 +5,7 @@ from datetime import datetime
 from fastapi import APIRouter, Query
 
 from ..aggregation import get_attribution, parse_brand, sum_lead_actions
-from ..schemas import OverviewResponse, TrendPoint
+from ..schemas import CplSplit, OverviewResponse, TrendPoint
 
 router = APIRouter()
 
@@ -106,6 +106,46 @@ def overview(
             date=date_str, spend=s, leads=leads, real_cpl=cpl, bookings=d["bookings"],
         ))
 
+    # Top-level spend = sum z daily_trend → karta Wydatek zgodna z wykresem.
+    # Inaczej rozjazd: insights_campaign (time_increment=all_days) ≠ daily insights (time_increment=1).
+    spend = sum(t.spend for t in trend)
+
+    # CPL split: acquisition vs retarget — bazuje na agg["campaign_type_by_id"].
+    # Spend per campaign bierzemy z spend_by_camp (insights all_days).
+    # Leady GHL z agg["per_campaign"]. Filter po brand jak wyżej.
+    type_by_camp: dict[str, str] = agg.get("campaign_type_by_id") or {}
+    if brand == "all":
+        cids_in_scope = set(spend_by_camp.keys()) | {row["campaign_id"] for row in agg["per_campaign"]}
+    else:
+        cids_in_scope = brand_cids  # type: ignore[name-defined]
+
+    spend_by_type = {"acquisition": 0.0, "retarget": 0.0, "unknown": 0.0}
+    leads_by_type = {"acquisition": 0, "retarget": 0, "unknown": 0}
+    untagged_count = 0
+    for cid in cids_in_scope:
+        ctype = type_by_camp.get(cid, "unknown")
+        spend_by_type[ctype] = spend_by_type.get(ctype, 0.0) + spend_by_camp.get(cid, 0.0)
+        if ctype == "unknown" and spend_by_camp.get(cid, 0.0) > 0:
+            untagged_count += 1
+    for row in agg["per_campaign"]:
+        cid = row["campaign_id"]
+        if cid not in cids_in_scope:
+            continue
+        ctype = type_by_camp.get(cid, "unknown")
+        leads_by_type[ctype] = leads_by_type.get(ctype, 0) + int(row.get("leads", 0))
+
+    split = CplSplit(
+        spend_acquisition=spend_by_type["acquisition"],
+        spend_retarget=spend_by_type["retarget"],
+        spend_unknown=spend_by_type["unknown"],
+        leads_acquisition=leads_by_type["acquisition"],
+        leads_retarget=leads_by_type["retarget"],
+        leads_unknown=leads_by_type["unknown"],
+        cpl_acquisition=(spend_by_type["acquisition"] / leads_by_type["acquisition"]) if leads_by_type["acquisition"] else None,
+        cpl_retarget=(spend_by_type["retarget"] / leads_by_type["retarget"]) if leads_by_type["retarget"] else None,
+        untagged_count=untagged_count,
+    )
+
     return OverviewResponse(
         from_=from_, to=to, tz=tz,
         spend=spend,
@@ -120,4 +160,5 @@ def overview(
         daily_trend=trend,
         last_updated_iso=datetime.utcnow().isoformat() + "Z",
         data_source="live" if prefer_live else "snapshot",
+        split=split,
     )

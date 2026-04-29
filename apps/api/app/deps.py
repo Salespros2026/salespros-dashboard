@@ -46,6 +46,11 @@ class Settings(BaseSettings):
     CACHE_TTL_SECONDS: int = 60
     DEFAULT_TZ: str = "Europe/Warsaw"
 
+    # Campaign classification (CPL split: acquisition vs retarget)
+    # VPS: /var/lib/salespros-dashboard/campaign_classification.json (mount volume)
+    # Lokal: względem cwd
+    CLASSIFICATION_FILE_PATH: str = "data/campaign_classification.json"
+
     @property
     def cors_origins(self) -> list[str]:
         return [o.strip() for o in self.CORS_ALLOW_ORIGINS.split(",") if o.strip()]

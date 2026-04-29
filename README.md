@@ -4,7 +4,7 @@ Mózg operacyjny do paid ads Meta + GoHighLevel pipeline. Read-only widok łącz
 
 ## Architektura
 
-- **Frontend**: Next.js 15 + Tailwind + shadcn/ui + Recharts → Vercel @ `dashboard.salespros.app`
+- **Frontend**: Next.js 15 + Tailwind + shadcn/ui + Recharts → Vercel @ `dashboard.salespros.pl`
 - **Backend**: FastAPI + facebook_business SDK → Docker na openclaw VPS @ `api.salespros.app`
 - **Auth**: Cloudflare Access (Google email whitelist) chroni oba hosty
 - **Networking**: Cloudflare Tunnel z openclaw → zero otwartych portów

@@ -11,6 +11,7 @@ RUN pip install -r requirements.txt
 
 COPY app ./app
 COPY attribution.py ./attribution.py
+COPY data ./data
 
 EXPOSE 8000
 

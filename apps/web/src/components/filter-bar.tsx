@@ -48,11 +48,23 @@ export function FilterBar({ lastUpdated }: { lastUpdated?: string | null }) {
 
   const onPreset = (preset: RangePreset) => {
     if (preset === "custom") {
-      updateParams({ preset });
+      updateParams({ preset, from: filters.from, to: filters.to });
       return;
     }
     const r = rangeForPreset(preset, filters.tz || DEFAULT_TZ);
     updateParams({ preset, from: r.from, to: r.to });
+  };
+
+  const onCustomFrom = (from: string) => {
+    if (!from) return;
+    const to = from > filters.to ? from : filters.to;
+    updateParams({ preset: "custom", from, to });
+  };
+
+  const onCustomTo = (to: string) => {
+    if (!to) return;
+    const from = to < filters.from ? to : filters.from;
+    updateParams({ preset: "custom", from, to });
   };
 
   const onTz = (tz: string) => {
@@ -83,9 +95,29 @@ export function FilterBar({ lastUpdated }: { lastUpdated?: string | null }) {
           </SelectContent>
         </Select>
 
-        <div className="text-sm text-muted-foreground tabular-nums">
-          {filters.from} → {filters.to}
-        </div>
+        {filters.preset === "custom" ? (
+          <div className="flex items-center gap-2">
+            <input
+              type="date"
+              value={filters.from}
+              max={filters.to}
+              onChange={(e) => onCustomFrom(e.target.value)}
+              className="h-9 rounded-md border border-input bg-transparent px-2 text-sm tabular-nums focus:outline-none focus:ring-1 focus:ring-ring"
+            />
+            <span className="text-muted-foreground">→</span>
+            <input
+              type="date"
+              value={filters.to}
+              min={filters.from}
+              onChange={(e) => onCustomTo(e.target.value)}
+              className="h-9 rounded-md border border-input bg-transparent px-2 text-sm tabular-nums focus:outline-none focus:ring-1 focus:ring-ring"
+            />
+          </div>
+        ) : (
+          <div className="text-sm text-muted-foreground tabular-nums">
+            {filters.from} → {filters.to}
+          </div>
+        )}
 
         <Separator orientation="vertical" className="h-6" />
 

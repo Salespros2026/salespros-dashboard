@@ -2,6 +2,20 @@
 
 export type Brand = "salespros" | "gawronify" | "other";
 
+export type CampaignType = "acquisition" | "retarget" | "unknown";
+
+export interface CplSplit {
+  spend_acquisition: number;
+  spend_retarget: number;
+  spend_unknown: number;
+  leads_acquisition: number;
+  leads_retarget: number;
+  leads_unknown: number;
+  cpl_acquisition: number | null;
+  cpl_retarget: number | null;
+  untagged_count: number;
+}
+
 export interface TrendPoint {
   date: string;
   spend: number;
@@ -26,6 +40,7 @@ export interface OverviewResponse {
   daily_trend: TrendPoint[];
   last_updated_iso: string;
   data_source: string;
+  split: CplSplit | null;
 }
 
 export interface CampaignRow {
@@ -34,6 +49,8 @@ export interface CampaignRow {
   brand: Brand;
   status: string;
   objective: string | null;
+  campaign_type: CampaignType;
+  is_manual_type: boolean;
   spend: number;
   impressions: number;
   ctr: number;
@@ -141,4 +158,26 @@ export interface FunnelResponse {
   pipeline_name: string;
   stages: FunnelStage[];
   dropoff: FunnelDropoff[];
+}
+
+export interface AdminCampaignRow {
+  campaign_id: string;
+  name: string;
+  objective: string | null;
+  status: string;
+  spend_30d: number;
+  campaign_type: CampaignType;
+  is_manual: boolean;
+  suggested_type: CampaignType;
+}
+
+export interface AdminCampaignsResponse {
+  campaigns: AdminCampaignRow[];
+  untagged_count: number;
+}
+
+export interface AdminSetTypeResponse {
+  campaign_id: string;
+  campaign_type: CampaignType;
+  is_manual: boolean;
 }

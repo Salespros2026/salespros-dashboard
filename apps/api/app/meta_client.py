@@ -6,6 +6,7 @@ time_range = {since, until} w timezone konta (Europe/Warsaw — to ad account TZ
 from __future__ import annotations
 
 import logging
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 from facebook_business.adobjects.adaccount import AdAccount
@@ -119,19 +120,28 @@ def fetch_creative(creative_id: str) -> dict:
     return _to_dict(AdCreative(creative_id).api_get(fields=_CREATIVE_FIELDS))
 
 
-def fetch_creatives_by_ad_id(ad_ids: list[str]) -> dict[str, dict]:
-    """Dla każdego ad_id pobiera jego creative metadata."""
+def _fetch_one_creative_for_ad(ad_id: str) -> tuple[str, dict | None]:
     from facebook_business.adobjects.ad import Ad
+    try:
+        ad = Ad(ad_id).api_get(fields=["creative"])
+        cid = (ad.get("creative") or {}).get("id")
+        if cid:
+            return ad_id, fetch_creative(cid)
+    except Exception as e:
+        log.warning("Creative fetch failed for ad %s: %s", ad_id, e)
+    return ad_id, None
+
+
+def fetch_creatives_by_ad_id(ad_ids: list[str]) -> dict[str, dict]:
+    """Dla każdego ad_id pobiera jego creative metadata. Równolegle (10 workers)."""
     _api()
     out: dict[str, dict] = {}
-    for ad_id in ad_ids:
-        try:
-            ad = Ad(ad_id).api_get(fields=["creative"])
-            cid = (ad.get("creative") or {}).get("id")
-            if cid:
-                out[ad_id] = fetch_creative(cid)
-        except Exception as e:
-            log.warning("Creative fetch failed for ad %s: %s", ad_id, e)
+    if not ad_ids:
+        return out
+    with ThreadPoolExecutor(max_workers=10) as ex:
+        for ad_id, creative in ex.map(_fetch_one_creative_for_ad, ad_ids):
+            if creative is not None:
+                out[ad_id] = creative
     return out
 
 
@@ -143,25 +153,28 @@ def build_meta_snapshot_like(since: str, until: str, full: bool = False) -> dict
     full=True: pobiera też adsets, ads×1000, creatives.
       Potrzebne dla /adsets i /creatives.
     """
-    account_info = fetch_account_info()
-    campaigns = fetch_campaigns()
+    levels = ["account", "campaign", "adset", "ad"]
+    with ThreadPoolExecutor(max_workers=6) as ex:
+        account_info_fut = ex.submit(fetch_account_info)
+        campaigns_fut = ex.submit(fetch_campaigns)
+        insights_futs = {lvl: ex.submit(fetch_insights, lvl, since, until) for lvl in levels}
+        if full:
+            adsets_fut = ex.submit(fetch_adsets)
+            ads_fut = ex.submit(fetch_ads)
 
-    insights = {
-        "account": fetch_insights("account", since, until),
-        "campaign": fetch_insights("campaign", since, until),
-        "adset": fetch_insights("adset", since, until),
-        "ad": fetch_insights("ad", since, until),
-    }
+        account_info = account_info_fut.result()
+        campaigns = campaigns_fut.result()
+        insights = {lvl: f.result() for lvl, f in insights_futs.items()}
 
-    if full:
-        adsets = fetch_adsets()
-        ads = fetch_ads()
-        spending_ad_ids = {ins.get("ad_id") for ins in insights["ad"] if float(ins.get("spend", 0) or 0) > 0}
-        creatives_by_ad_id = fetch_creatives_by_ad_id(list(spending_ad_ids))
-    else:
-        adsets = []
-        ads = []
-        creatives_by_ad_id = {}
+        if full:
+            adsets = adsets_fut.result()
+            ads = ads_fut.result()
+            spending_ad_ids = {ins.get("ad_id") for ins in insights["ad"] if float(ins.get("spend", 0) or 0) > 0}
+            creatives_by_ad_id = fetch_creatives_by_ad_id(list(spending_ad_ids))
+        else:
+            adsets = []
+            ads = []
+            creatives_by_ad_id = {}
 
     return {
         "snapshot_date": until,

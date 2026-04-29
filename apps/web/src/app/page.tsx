@@ -1,4 +1,6 @@
+import Link from "next/link";
 import { Suspense } from "react";
+import { AlertTriangle } from "lucide-react";
 
 import { FilterBar } from "@/components/filter-bar";
 import { KpiCard } from "@/components/kpi-card";
@@ -8,7 +10,7 @@ import { api } from "@/lib/api";
 import { fInt, fPln } from "@/lib/format";
 import { parseFilters } from "@/lib/filters";
 
-export const dynamic = "force-dynamic";
+export const revalidate = 60;
 
 interface Props {
   searchParams: Promise<Record<string, string | undefined>>;
@@ -32,28 +34,62 @@ async function OverviewContent({ filters }: { filters: ReturnType<typeof parseFi
     );
   }
 
+  const split = data.split;
+  const totalSplitSpend = split
+    ? split.spend_acquisition + split.spend_retarget + split.spend_unknown
+    : 0;
+  const acqPct = split && totalSplitSpend > 0 ? (split.spend_acquisition / totalSplitSpend) * 100 : 0;
+  const rtgPct = split && totalSplitSpend > 0 ? (split.spend_retarget / totalSplitSpend) * 100 : 0;
+
   return (
     <div className="space-y-6">
+      {split && split.untagged_count > 0 && (
+        <Card className="border-amber-500/40 bg-amber-500/5">
+          <CardContent className="py-3 flex items-center gap-3">
+            <AlertTriangle className="h-4 w-4 text-amber-400 shrink-0" />
+            <div className="text-sm flex-1">
+              <span className="font-medium text-amber-200">{split.untagged_count}</span>{" "}
+              <span className="text-muted-foreground">
+                {split.untagged_count === 1 ? "kampania wymaga" : "kampanii wymaga"} klasyfikacji jako acquisition lub retarget. Bez tego CPL Total miksuje koszt nowych leadów z retargetingiem.
+              </span>
+            </div>
+            <Link
+              href="/admin/campaigns"
+              className="text-xs font-medium text-amber-300 hover:text-amber-200 underline underline-offset-2"
+            >
+              Otaguj →
+            </Link>
+          </CardContent>
+        </Card>
+      )}
+
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <KpiCard
-          label="Wydatek"
-          value={fPln(data.spend)}
-          subtitle={`${data.from_} → ${data.to}`}
-        />
-        <KpiCard
-          label="Real leady (GHL)"
-          value={fInt(data.real_leads)}
-          subtitle={`Meta raportuje: ${fInt(data.meta_leads)} (zawyża)`}
-          tooltip="Real leady = kontakty w GHL z mailem lub telefonem (filter is_real_lead). Meta zlicza też view-throughy i pixel duplikaty."
-        />
-        <KpiCard
-          label="Real CPL"
-          value={fPln(data.real_cpl)}
-          subtitle={`Meta CPL: ${fPln(data.meta_cpl)}`}
-          tooltip="Real CPL = spend / real leady GHL. Meta CPL ≈ 3× zawyżony przez Custom Conversion fires."
+          label="CPL Acquisition"
+          value={fPln(split?.cpl_acquisition ?? null)}
+          subtitle={split ? `${fPln(split.spend_acquisition)} / ${fInt(split.leads_acquisition)} leadów` : "—"}
+          tooltip="Realny koszt pozyskania nowego leada (cold). Spend kampanii oznaczonych jako acquisition / suma leadów GHL z tych kampanii."
           highlight={
-            data.real_cpl == null ? undefined : data.real_cpl > 20 ? "danger" : data.real_cpl > 15 ? "warning" : "success"
+            split?.cpl_acquisition == null
+              ? undefined
+              : split.cpl_acquisition > 25
+                ? "danger"
+                : split.cpl_acquisition > 18
+                  ? "warning"
+                  : "success"
           }
+        />
+        <KpiCard
+          label="CPL Retarget"
+          value={fPln(split?.cpl_retarget ?? null)}
+          subtitle={split ? `${fPln(split.spend_retarget)} / ${fInt(split.leads_retarget)} leadów` : "—"}
+          tooltip='Re-engagement istniejących leadów (warm). Strategia "Hammer them". Powinien być znacznie niższy niż CPL Acquisition.'
+        />
+        <KpiCard
+          label="CPL Total (legacy)"
+          value={fPln(data.real_cpl)}
+          subtitle={`${fPln(data.spend)} / ${fInt(data.real_leads)} leadów`}
+          tooltip="Spend całego konta / wszystkich realnych leadów GHL — miesza acquisition z retargetingiem. Patrz CPL Acquisition żeby zobaczyć realny koszt nowego leada."
         />
         <KpiCard
           label="Bookingi"
@@ -62,6 +98,24 @@ async function OverviewContent({ filters }: { filters: ReturnType<typeof parseFi
           tooltip='Booking = opportunity w stage "Umówiona rozmowa" w pipeline SalesPROs closing.'
         />
       </div>
+
+      {split && totalSplitSpend > 0 && (
+        <Card>
+          <CardContent className="py-3">
+            <div className="flex items-center justify-between text-xs text-muted-foreground mb-2">
+              <span>Spend split: {acqPct.toFixed(0)}% Acquisition · {rtgPct.toFixed(0)}% Retarget{split.spend_unknown > 0 ? ` · ${(100 - acqPct - rtgPct).toFixed(0)}% Untagged` : ""}</span>
+              <span className="tabular-nums">{fPln(totalSplitSpend)} łącznie</span>
+            </div>
+            <div className="flex h-2 w-full overflow-hidden rounded-full bg-muted">
+              <div className="bg-emerald-500" style={{ width: `${acqPct}%` }} />
+              <div className="bg-blue-500" style={{ width: `${rtgPct}%` }} />
+              {split.spend_unknown > 0 && (
+                <div className="bg-amber-500" style={{ width: `${100 - acqPct - rtgPct}%` }} />
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>

@@ -5,7 +5,7 @@
 ```
 Browser (Dawid)
    │
-   │  https://dashboard.salespros.app  (Vercel CDN, NextAuth Google login)
+   │  https://dashboard.salespros.pl   (Vercel CDN, NextAuth Google login)
    ▼
 Next.js (Vercel)
    │  server-side fetch z X-API-Key
@@ -19,8 +19,8 @@ FastAPI :8000 (Docker, network n8n_default)
    └──► GHL REST API
 ```
 
-DNS: SEOhost panel — 2 CNAME:
-- `dashboard.salespros.app` → `cname.vercel-dns.com`
+DNS: SEOhost panel — 2 rekordy:
+- `dashboard.salespros.pl` → CNAME `cname.vercel-dns.com`
 - `api.salespros.app` → A record `159.69.34.23` (lub CNAME do openclaw hostname)
 
 ---
@@ -33,10 +33,10 @@ DNS: SEOhost panel — 2 CNAME:
    - Type: Web application
    - Name: `salespros-dashboard`
    - Authorized JavaScript origins:
-     - `https://dashboard.salespros.app`
+     - `https://dashboard.salespros.pl`
      - `http://localhost:3000` (dev)
    - Authorized redirect URIs:
-     - `https://dashboard.salespros.app/api/auth/callback/google`
+     - `https://dashboard.salespros.pl/api/auth/callback/google`
      - `http://localhost:3000/api/auth/callback/google`
 4. Skopiuj `Client ID` → `AUTH_GOOGLE_ID`, `Client Secret` → `AUTH_GOOGLE_SECRET`
 
@@ -54,15 +54,15 @@ DNS: SEOhost panel — 2 CNAME:
    AUTH_GOOGLE_ID          = <z kroku 1>
    AUTH_GOOGLE_SECRET      = <z kroku 1>
    AUTH_TRUST_HOST         = true
-   AUTH_ALLOWED_EMAILS     = dawiddziadkowiec28@gmail.com
+   AUTH_ALLOWED_EMAILS     = admin@salespros.pl,dawiddziadkowiec28@gmail.com
    ```
-5. **Deploy** → po pierwszym deploy: **Settings → Domains → Add `dashboard.salespros.app`** → Vercel pokaże CNAME do dodania w SEOhost.
+5. **Deploy** → po pierwszym deploy: **Settings → Domains → Add `dashboard.salespros.pl`** → Vercel pokaże CNAME do dodania w SEOhost.
 
 ## 3. SEOhost DNS (Twoje 2 CNAME)
 
-W panelu SEOhost → DNS dla `salespros.app`:
-- Type CNAME, Host `dashboard`, Target `cname.vercel-dns.com.` (Vercel poda dokładny target)
-- Type A, Host `api`, Target `159.69.34.23` (IP openclaw)
+W panelu SEOhost:
+- Strefa `salespros.pl` → CNAME, Host `dashboard`, Target `cname.vercel-dns.com.` (Vercel poda dokładny target)
+- Strefa `salespros.app` → A record, Host `api`, Target `159.69.34.23` (IP openclaw)
 
 TTL 3600. Propagacja zwykle <30 min.
 
@@ -89,7 +89,7 @@ ssh openclaw 'cat >> /root/salespros-dashboard/apps/api/.env <<EOF
 SNAPSHOTS_DIR=/app/snapshots
 REQUIRE_API_KEY=true
 DASHBOARD_API_KEY=<ten sam co w Vercel>
-CORS_ALLOW_ORIGINS=https://dashboard.salespros.app
+CORS_ALLOW_ORIGINS=https://dashboard.salespros.pl
 EOF'
 
 # C. Pierwszy snapshot sync
@@ -121,7 +121,7 @@ rsync -avz --exclude='*.bak.*' \
 
 ## 6. Smoke check
 
-1. Otwórz `https://dashboard.salespros.app` w incognito → redirect na `/login`
+1. Otwórz `https://dashboard.salespros.pl` w incognito → redirect na `/login`
 2. Klik "Zaloguj przez Google" → Google OAuth → zgadzasz na consent → wracasz na dashboard
 3. Sprawdź: KPI cards, real CPL ≠ Meta CPL, kampanie GAWRONIFY/Salespros split, klik na kreację → drill-down z listą leadów GHL
 4. Klik leada → otwiera `app.gohighlevel.com/v2/...` z kontaktem

@@ -35,6 +35,27 @@ const columns: ColumnDef<CampaignRow>[] = [
     },
   },
   {
+    accessorKey: "campaign_type",
+    header: "Typ",
+    cell: ({ row }) => {
+      const t = row.original.campaign_type;
+      const isManual = row.original.is_manual_type;
+      const cls =
+        t === "acquisition"
+          ? "bg-emerald-500/15 text-emerald-300 border-emerald-500/30"
+          : t === "retarget"
+            ? "bg-blue-500/15 text-blue-300 border-blue-500/30"
+            : "bg-amber-500/15 text-amber-300 border-amber-500/30";
+      const label = t === "acquisition" ? "ACQ" : t === "retarget" ? "RTG" : "?";
+      return (
+        <Badge variant="outline" className={cls} title={isManual ? "Tag ustawiony manualnie" : "Tag z auto-rules — kliknij /admin/campaigns żeby override"}>
+          {label}
+          {!isManual && t !== "unknown" && <span className="ml-1 opacity-60">auto</span>}
+        </Badge>
+      );
+    },
+  },
+  {
     accessorKey: "spend",
     header: "Spend",
     cell: ({ getValue }) => fPln(getValue<number>()),

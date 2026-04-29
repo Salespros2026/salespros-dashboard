@@ -16,9 +16,9 @@
 api.salespros.app {
 	# CORS dla Vercel frontend (jeśli kiedyś browser wywoła bezpośrednio)
 	@cors {
-		header Origin https://dashboard.salespros.app
+		header Origin https://dashboard.salespros.pl
 	}
-	header @cors Access-Control-Allow-Origin "https://dashboard.salespros.app"
+	header @cors Access-Control-Allow-Origin "https://dashboard.salespros.pl"
 	header @cors Access-Control-Allow-Credentials "true"
 
 	# Forward do FastAPI containera w sieci n8n_default

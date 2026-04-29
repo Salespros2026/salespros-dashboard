@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Query
 
+from .. import classifier
 from ..aggregation import get_attribution, parse_brand
 from ..schemas import CampaignRow, CampaignsResponse
 
@@ -25,6 +26,7 @@ def campaigns(
     meta = agg["_meta_raw"]
     by_id = {c["id"]: c for c in meta.get("campaigns", [])}
     insights_camp = {ins.get("campaign_id"): ins for ins in agg["insights_campaign"]}
+    type_by_camp: dict[str, str] = agg.get("campaign_type_by_id") or {}
 
     rows: list[CampaignRow] = []
     seen_ids = set()
@@ -57,6 +59,8 @@ def campaigns(
             brand=b,
             status=camp_status,
             objective=meta_obj.get("objective"),
+            campaign_type=type_by_camp.get(cid, "unknown"),
+            is_manual_type=classifier.is_manual(cid),
             spend=camp_agg.get("spend", 0.0),
             impressions=int(float(ins.get("impressions", 0) or 0)),
             ctr=float(ins.get("ctr", 0) or 0),
@@ -95,6 +99,8 @@ def campaigns(
             brand=b,
             status=camp_status,
             objective=meta_obj.get("objective"),
+            campaign_type=type_by_camp.get(cid, "unknown"),
+            is_manual_type=classifier.is_manual(cid),
             spend=spend,
             impressions=int(float(ins.get("impressions", 0) or 0)),
             ctr=float(ins.get("ctr", 0) or 0),

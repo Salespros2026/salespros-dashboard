@@ -179,12 +179,32 @@ def aggregate_range(meta: dict, ghl: dict, from_date: str, to_date: str) -> dict
         row["meta_cpl"] = (row["spend"] / row["meta_leads"]) if row["meta_leads"] else None
         row["real_cpb"] = (row["spend"] / row["bookings"]) if row["bookings"] else None
 
+    # Klasyfikacja kampanii — campaign_type per kampania (acquisition / retarget / unknown)
+    from . import classifier
+    camp_meta_by_id = {c.get("id"): c for c in (meta.get("campaigns") or [])}
+    type_by_camp: dict[str, str] = {}
+
     for cid, row in per_campaign.items():
         row["spend"] = spend_by_camp.get(cid, row.get("spend", 0.0))
         row["meta_leads"] = meta_leads_by_camp.get(cid, 0)
         row["real_cpl"] = (row["spend"] / row["leads"]) if row["leads"] else None
         row["meta_cpl"] = (row["spend"] / row["meta_leads"]) if row["meta_leads"] else None
         row["real_cpb"] = (row["spend"] / row["bookings"]) if row["bookings"] else None
+        camp_meta = camp_meta_by_id.get(cid) or {"id": cid, "name": row.get("campaign_name", "")}
+        ctype = classifier.classify_campaign(camp_meta)
+        row["campaign_type"] = ctype
+        type_by_camp[cid] = ctype
+
+    # Także dla kampanii z insights ale bez per_campaign row (spend bez leadów GHL)
+    for cid in spend_by_camp:
+        if cid not in type_by_camp:
+            camp_meta = camp_meta_by_id.get(cid) or {"id": cid}
+            type_by_camp[cid] = classifier.classify_campaign(camp_meta)
+
+    # Dla per_ad — dziedzicz typ z parent campaign
+    for row in per_ad.values():
+        cid = row.get("campaign_id", "")
+        row["campaign_type"] = type_by_camp.get(cid, "unknown")
 
     # Total Meta leads (aggregated)
     if insights_acct:
@@ -205,6 +225,7 @@ def aggregate_range(meta: dict, ghl: dict, from_date: str, to_date: str) -> dict
         "insights_campaign": insights_camp,
         "insights_ad": insights_ad,
         "insights_adset": insights_adset,
+        "campaign_type_by_id": type_by_camp,
     }
 
 
@@ -226,5 +247,13 @@ def get_attribution(from_date: str, to_date: str, prefer_live: bool = True, full
     agg = aggregate_range(meta, ghl, from_date, to_date)
     agg["_meta_raw"] = meta
     agg["_ghl_raw"] = ghl
-    cache().set(key, agg)
+    # Lite (overview/campaigns/funnel): 5 min — Meta nie zmienia się szybciej.
+    # Full (adsets/creatives): 15 min — droższy fetch (creatives × ad_ids), wolniej się zmienia.
+    # Historical range (to_date < dziś): 1h — dane immutable po zamknięciu okna atrybucji.
+    today = date.today().isoformat()
+    if to_date < today:
+        ttl = 3600
+    else:
+        ttl = 900 if full else 300
+    cache().set(key, agg, ttl=ttl)
     return agg

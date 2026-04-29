@@ -7,7 +7,7 @@ import { api } from "@/lib/api";
 import { fPln } from "@/lib/format";
 import { parseFilters } from "@/lib/filters";
 
-export const dynamic = "force-dynamic";
+export const revalidate = 60;
 
 interface Props {
   searchParams: Promise<Record<string, string | undefined>>;
