@@ -37,6 +37,11 @@ class CplSplit(BaseModel):
     cpa_retarget: float | None = None
     roas_acquisition: float | None = None
     roas_retarget: float | None = None
+    # Retarget separation: bookings + re-engagement metrics (zamiast CPL który nie ma sensu)
+    bookings_acquisition: int = 0
+    bookings_retarget: int = 0
+    re_engaged_leads_retarget: int = 0      # leady z poprzedniego touchpoint, RTG ad tylko re-aktywował
+    cost_per_booking_retarget: float | None = None  # spend_retarget / bookings_retarget
 
 
 class OverviewResponse(BaseModel):

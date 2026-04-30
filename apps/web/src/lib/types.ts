@@ -23,6 +23,11 @@ export interface CplSplit {
   cpa_retarget: number | null;
   roas_acquisition: number | null;
   roas_retarget: number | null;
+  // Retarget separation
+  bookings_acquisition: number;
+  bookings_retarget: number;
+  re_engaged_leads_retarget: number;
+  cost_per_booking_retarget: number | null;
 }
 
 export interface TrendPoint {

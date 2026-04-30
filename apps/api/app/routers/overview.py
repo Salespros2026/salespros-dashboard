@@ -123,6 +123,7 @@ def overview(
     leads_by_type = {"acquisition": 0, "retarget": 0, "unknown": 0}
     sales_by_type = {"acquisition": 0, "retarget": 0, "unknown": 0}
     revenue_by_type = {"acquisition": 0.0, "retarget": 0.0, "unknown": 0.0}
+    bookings_by_type = {"acquisition": 0, "retarget": 0, "unknown": 0}
     untagged_count = 0
     for cid in cids_in_scope:
         ctype = type_by_camp.get(cid, "unknown")
@@ -137,6 +138,23 @@ def overview(
         leads_by_type[ctype] = leads_by_type.get(ctype, 0) + int(row.get("leads", 0))
         sales_by_type[ctype] = sales_by_type.get(ctype, 0) + int(row.get("sales", 0))
         revenue_by_type[ctype] = revenue_by_type.get(ctype, 0.0) + float(row.get("revenue_pln", 0.0) or 0)
+        bookings_by_type[ctype] = bookings_by_type.get(ctype, 0) + int(row.get("bookings", 0))
+
+    # Re-engagement detection: leady przypisane do RTG creative ALE które miały
+    # poprzedni touchpoint (czyli ad tylko re-aktywował). Liczymy z _ghl_raw contacts.
+    import sys as _sys2
+    _sys2.path.insert(0, str(__import__("pathlib").Path(__file__).resolve().parent.parent.parent))
+    import attribution as _attr  # type: ignore
+    re_engaged_count = 0
+    rtg_cids = {cid for cid in cids_in_scope if type_by_camp.get(cid) == "retarget"}
+    for c in (agg["_ghl_raw"].get("contacts") or []):
+        if not (c.get("email") or c.get("phone")):
+            continue
+        camp_id = _attr.get_meta_campaign_id(c)
+        if camp_id not in rtg_cids:
+            continue
+        if _attr.is_re_engagement(c):
+            re_engaged_count += 1
 
     split = CplSplit(
         spend_acquisition=spend_by_type["acquisition"],
@@ -156,6 +174,10 @@ def overview(
         cpa_retarget=(spend_by_type["retarget"] / sales_by_type["retarget"]) if sales_by_type["retarget"] else None,
         roas_acquisition=(revenue_by_type["acquisition"] / spend_by_type["acquisition"]) if spend_by_type["acquisition"] else None,
         roas_retarget=(revenue_by_type["retarget"] / spend_by_type["retarget"]) if spend_by_type["retarget"] else None,
+        bookings_acquisition=bookings_by_type["acquisition"],
+        bookings_retarget=bookings_by_type["retarget"],
+        re_engaged_leads_retarget=re_engaged_count,
+        cost_per_booking_retarget=(spend_by_type["retarget"] / bookings_by_type["retarget"]) if bookings_by_type["retarget"] else None,
     )
 
     # Top-level revenue + CPA + ROAS (sumy z brand-filtered scope)

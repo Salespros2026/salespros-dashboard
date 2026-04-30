@@ -56,8 +56,9 @@ def creatives(
         ghl_leads = ghl_row.get("leads", 0)
         meta_leads = sum_lead_actions(ins.get("actions"))
 
-        # P1 fix: prawdziwy hook_rate (3-sec view / impressions) — wcześniej liczony
-        # błędnie z video_p25 (= 25% completion). Hold rate = 15-sec / 3-sec.
+        # Hook rate = 3-sec views / impressions. Meta liczy 3-sec views poprzez
+        # actions[].action_type='video_view' (NIE osobne pole — to przyczyna regresji).
+        # Hold rate = video_p50 / video_p25 (50% retention z tych co dotrwali do 25%).
         def _sum_first(action_list):
             if not action_list:
                 return 0
@@ -66,10 +67,22 @@ def creatives(
             except (TypeError, ValueError):
                 return 0
 
-        v3s = _sum_first(ins.get("video_3_sec_watched_actions"))
-        v15s = _sum_first(ins.get("video_15_sec_watched_actions"))
+        def _action_value(actions, action_type):
+            if not actions:
+                return 0
+            for a in actions:
+                if a.get("action_type") == action_type:
+                    try:
+                        return int(float(a.get("value", 0)))
+                    except (TypeError, ValueError):
+                        return 0
+            return 0
+
+        v3s = _action_value(ins.get("actions"), "video_view")
+        v25 = _sum_first(ins.get("video_p25_watched_actions"))
+        v50 = _sum_first(ins.get("video_p50_watched_actions"))
         hook_rate = (v3s / impressions) if impressions and v3s else None
-        hold_rate = (v15s / v3s) if v3s and v15s else None
+        hold_rate = (v50 / v25) if v25 and v50 else None
 
         # Creative Health Score (composite z creative-rules.md)
         from ..scoring import compute_health_score

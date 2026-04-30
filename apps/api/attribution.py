@@ -106,6 +106,30 @@ def is_paid_social(contact: dict) -> bool:
     return False
 
 
+def is_re_engagement(contact: dict) -> bool:
+    """Czy contact to re-engaged lead (był w bazie wcześniej, retarget ad re-aktywował)?
+
+    Heurystyka: GHL trzyma `attributionSource` (last touch) i `lastAttributionSource`
+    (czasem first touch). Jeśli oba istnieją i mają RÓŻNE utmContent — contact miał
+    poprzednie touchpoints, czyli to nie jest "nowy lead z tego ad".
+
+    Uzupełnienie: nowy format `attributions[]` może mieć > 1 elementu (lista touchpoints).
+    Jeśli ma > 1 → re-engagement.
+    """
+    arr = contact.get("attributions")
+    if isinstance(arr, list) and len(arr) > 1:
+        # > 1 touchpoint = re-engagement
+        return True
+    last = contact.get("lastAttributionSource") or {}
+    first = contact.get("attributionSource") or {}
+    if last and first:
+        last_utm = last.get("utmContent") or last.get("campaign")
+        first_utm = first.get("utmContent") or first.get("campaign")
+        if last_utm and first_utm and last_utm != first_utm:
+            return True
+    return False
+
+
 def is_organic_instagram(contact: dict) -> bool:
     """Kontakt z organic Instagram (Reels, posts, DM)?"""
     if is_paid_social(contact):

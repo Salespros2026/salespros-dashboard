@@ -80,10 +80,10 @@ async function OverviewContent({ filters }: { filters: ReturnType<typeof parseFi
           }
         />
         <KpiCard
-          label="CPL Retarget"
-          value={fPln(split?.cpl_retarget ?? null)}
-          subtitle={split ? `${fPln(split.spend_retarget)} / ${fInt(split.leads_retarget)} leadów` : "—"}
-          tooltip='Re-engagement istniejących leadów (warm). Strategia "Hammer them". Powinien być znacznie niższy niż CPL Acquisition.'
+          label="CPB Retarget"
+          value={fPln(split?.cost_per_booking_retarget ?? null)}
+          subtitle={split ? `${fPln(split.spend_retarget)} → ${fInt(split.bookings_retarget)} bookings (${fInt(split.re_engaged_leads_retarget)} re-engaged)` : "—"}
+          tooltip='Cost per Booking dla kampanii retarget ("Hammer them"). Retarget z definicji NIE generuje nowych leadów — tylko re-aktywuje istniejących. Mierzymy CPB (spend / bookings od retarget contactów), nie CPL. Re-engaged = liczba leadów które miały już poprzedni touchpoint przed retargetem.'
         />
         <KpiCard
           label="CPL Total (legacy)"

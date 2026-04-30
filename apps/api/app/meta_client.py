@@ -19,12 +19,10 @@ log = logging.getLogger("meta_client")
 _INSIGHT_FIELDS = [
     "spend", "impressions", "reach", "clicks", "ctr", "cpc", "cpm",
     "frequency", "actions", "cost_per_action_type",
-    "inline_link_clicks",  # P1: prawdziwe link clicks (vs all clicks dla CTR link)
-    # P1: prawdziwy hook_rate (3-sec view) i hold_rate (15-sec view) — wcześniej hook_rate liczony
-    # błędnie z video_p25 (25% completion). 3sec/15sec to industry standard (Motion app blog).
-    "video_3_sec_watched_actions",
-    "video_15_sec_watched_actions",
-    "video_thruplay_watched_actions",
+    "inline_link_clicks",  # link clicks (vs all clicks)
+    # Video metrics — Meta nie ma osobnych pól dla 3sec/15sec view; 3-sec views są w
+    # actions[].action_type='video_view'. Hold rate liczymy z p50/p25 jako proxy retention.
+    "video_thruplay_watched_actions",  # 15s lub 97% — Meta default
     "video_p25_watched_actions", "video_p50_watched_actions",
     "video_p75_watched_actions", "video_p100_watched_actions",
     "ad_id", "ad_name", "adset_id", "adset_name", "campaign_id", "campaign_name",
