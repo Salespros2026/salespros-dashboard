@@ -94,7 +94,7 @@ async function OverviewContent({ filters }: { filters: ReturnType<typeof parseFi
         <KpiCard
           label="Bookingi"
           value={fInt(data.bookings_in_period)}
-          subtitle={`Kohort: ${fInt(data.bookings)} | Sales: ${data.sales}`}
+          subtitle={`Kohort: ${fInt(data.bookings)} | Sales: ${data.sales_in_period}`}
           tooltip='Wszystkie spotkania umówione w tym okresie (calendar events confirmed/showed/noShow/rescheduled/cancelled, ze startTime w zakresie). "Kohort" = bookingi tylko z leadów dodanych w tym okresie.'
         />
       </div>
@@ -135,15 +135,15 @@ async function OverviewContent({ filters }: { filters: ReturnType<typeof parseFi
         />
         <KpiCard
           label="Revenue"
-          value={fPln(data.revenue)}
-          subtitle={split ? `ACQ: ${fPln(split.revenue_acquisition)} | RTG: ${fPln(split.revenue_retarget)}` : `${data.sales} sprzedaży`}
-          tooltip="Suma monetaryValue z opportunities zamkniętych jako sprzedaż w wybranym zakresie dat."
+          value={fPln(data.revenue_in_period)}
+          subtitle={`Kohort: ${fPln(data.revenue)} | ${data.sales_in_period} sprzedaży`}
+          tooltip='Suma monetaryValue z WSZYSTKICH opportunities w pipelinach (closing + CS) z createdAt w okresie. Kohort = tylko paid_contacts.'
         />
         <KpiCard
           label="Sprzedaże"
-          value={fInt(data.sales)}
-          subtitle={split ? `ACQ: ${fInt(split.sales_acquisition)} | RTG: ${fInt(split.sales_retarget)}` : "—"}
-          tooltip='Liczba zamkniętych sprzedaży (opportunity w "Nowy klient" lub "Opłacony START").'
+          value={fInt(data.sales_in_period)}
+          subtitle={`Kohort (paid only): ${fInt(data.sales)}` + (split ? ` | ACQ: ${fInt(split.sales_acquisition)}` : "")}
+          tooltip='Wszyscy klienci którzy kupili (Opłacony START + I tydzień Sprzedaż + Zaplanować onboarding + dalej w CS pipeline).'
         />
       </div>
 

@@ -45,6 +45,8 @@ export interface OverviewResponse {
   real_cpb: number | null;
   bookings: number;                  // kohort: leady dodane w okresie + booked
   bookings_in_period: number;        // flow: wszystkie spotkania ze startTime w okresie (ground truth)
+  sales_in_period: number;           // flow: wszystkie sprzedaże (closing + CS pipeline) w okresie
+  revenue_in_period: number;         // flow: revenue ze wszystkich sale opp w okresie
   sales: number;
   ig_sync_ghosts: number;
   daily_trend: TrendPoint[];
@@ -139,7 +141,10 @@ export interface CreativeRow {
   revenue: number;
   cpa: number | null;
   roas: number | null;
-  hook_rate: number | null;
+  hook_rate: number | null;        // 3-sec views / impressions
+  hold_rate: number | null;        // 15-sec / 3-sec
+  health_score: number | null;     // composite 0-100, null = za mało danych
+  health_status: string;           // "winner" | "average" | "loser" | "insufficient"
   winner_badge: boolean;
   loser_badge: boolean;
 }

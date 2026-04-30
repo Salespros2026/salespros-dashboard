@@ -56,15 +56,31 @@ def creatives(
         ghl_leads = ghl_row.get("leads", 0)
         meta_leads = sum_lead_actions(ins.get("actions"))
 
-        # hook rate: video_p25 / impressions
-        hook_rate = None
-        v25 = ins.get("video_p25_watched_actions") or []
-        if v25 and impressions:
+        # P1 fix: prawdziwy hook_rate (3-sec view / impressions) — wcześniej liczony
+        # błędnie z video_p25 (= 25% completion). Hold rate = 15-sec / 3-sec.
+        def _sum_first(action_list):
+            if not action_list:
+                return 0
             try:
-                v = sum(int(float(a.get("value", 0))) for a in v25)
-                hook_rate = v / impressions if impressions else None
+                return sum(int(float(a.get("value", 0))) for a in action_list)
             except (TypeError, ValueError):
-                pass
+                return 0
+
+        v3s = _sum_first(ins.get("video_3_sec_watched_actions"))
+        v15s = _sum_first(ins.get("video_15_sec_watched_actions"))
+        hook_rate = (v3s / impressions) if impressions and v3s else None
+        hold_rate = (v15s / v3s) if v3s and v15s else None
+
+        # Creative Health Score (composite z creative-rules.md)
+        from ..scoring import compute_health_score
+        health_score, health_status = compute_health_score(
+            spend=spend,
+            real_cpl=ghl_row.get("real_cpl"),
+            hook_rate=hook_rate,
+            hold_rate=hold_rate,
+            ctr=float(ins.get("ctr", 0) or 0),
+            frequency=float(ins.get("frequency", 0) or 0),
+        )
 
         rows.append(CreativeRow(
             ad_id=ad_id,
@@ -91,6 +107,9 @@ def creatives(
             cpa=ghl_row.get("cpa"),
             roas=ghl_row.get("roas"),
             hook_rate=hook_rate,
+            hold_rate=hold_rate,
+            health_score=health_score,
+            health_status=health_status,
         ))
 
     # Winner / loser badges — bazując na real_cpl wzgl. avg

@@ -124,8 +124,10 @@ def aggregate_range(meta: dict, ghl: dict, from_date: str, to_date: str) -> dict
         "bookings": 0, "sales": 0,
         # Fix #A5: 3-bucket attribution
         "utm_attributed_leads": 0, "paid_unmapped_leads": 0, "untrackable_leads": 0,
-        # Fix #A3: flow metric (calendar events ze startTime w okresie, niezależnie od daty leada)
+        # Fix #A3: flow metrics (events/opps w okresie, niezależnie od daty leada)
         "bookings_in_period": 0,
+        "sales_in_period": 0,
+        "revenue_in_period": 0.0,
     }
     per_ad: dict[str, dict] = {}
     per_campaign: dict[str, dict] = {}
@@ -190,6 +192,46 @@ def aggregate_range(meta: dict, ghl: dict, from_date: str, to_date: str) -> dict
         if from_d <= st_date <= to_d:
             bookings_in_period += 1
     totals["bookings_in_period"] = bookings_in_period
+
+    # Sales/revenue w okresie — TOTAL ze wszystkich contactów (nie tylko paid).
+    # Per-creative sales zostaje paid-only (bo organic nie ma kreacji), ale top KPI
+    # powinno pokazywać wszystkie sprzedaże w pipelinie (closing + CS).
+    # Liczymy opportunities z createdAt w okresie + stage in SALE_STAGES.
+    total_sales_in_period = 0
+    total_revenue_in_period = 0.0
+    pipelines_for_stages = (ghl.get("pipelines") or [])
+    stage_map_for_sales = attribution.build_stage_map(pipelines_for_stages)
+    # Też mapujemy stages z CS pipeline (build_stage_map domyślnie tylko closing)
+    cs_stage_map: dict[str, dict] = {}
+    for p in pipelines_for_stages:
+        for st in p.get("stages", []) or []:
+            cs_stage_map[st.get("id", "")] = {"stage_name": st.get("name"), "pipeline_name": p.get("name")}
+    seen_contact_for_sale: set[str] = set()  # contact może mieć kilka opp w sale stages — count once per contact
+    for o in (ghl.get("opportunities") or []):
+        sid = o.get("pipelineStageId") or o.get("pipelineStageUId")
+        info = cs_stage_map.get(sid) or stage_map_for_sales.get(sid) or {}
+        if info.get("stage_name") not in attribution.SALE_STAGES:
+            continue
+        # Filter po dacie utworzenia opportunity (kupili w tym okresie)
+        created = o.get("createdAt") or o.get("dateAdded") or ""
+        try:
+            created_date = attribution.parse_iso(created).astimezone(attribution.LOCAL_TZ).date()
+        except Exception:
+            continue
+        if not (from_d <= created_date <= to_d):
+            continue
+        cid = o.get("contactId")
+        if cid and cid in seen_contact_for_sale:
+            continue
+        if cid:
+            seen_contact_for_sale.add(cid)
+        total_sales_in_period += 1
+        try:
+            total_revenue_in_period += float(o.get("monetaryValue") or 0)
+        except (TypeError, ValueError):
+            pass
+    totals["sales_in_period"] = total_sales_in_period
+    totals["revenue_in_period"] = total_revenue_in_period
 
     # Spend dla całego range — z meta insights account-level (już agregowane przez Meta)
     insights_acct = (meta.get("insights") or {}).get("account") or []

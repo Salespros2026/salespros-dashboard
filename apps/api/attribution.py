@@ -28,8 +28,20 @@ else:
 
 # Stages bookingu (z `SalesPROs closing` pipeline) — fallback gdy brak calendar events
 BOOKING_STAGES = {"Umówiona rozmowa"}
-# Stages sprzedaży
-SALE_STAGES = {"Nowy klient", "Opłacony START"}
+# Stages sprzedaży — oznaczają "klient kupił" (closing pipeline + CS pipeline weszli na onboarding)
+SALE_STAGES = {
+    # SalesPROs closing
+    "Nowy klient", "Opłacony START",
+    # 💲SalesPROs - CS (klient w onboardingu = już zapłacił, kupił START)
+    "Zaplanować onboarding",
+    "I tydzień: Sprzedaż", "II tydzień: Linkedin", "III tydzień: CV i Aplikacja",
+    "IV tydzień: Rekrutacja [ROLEPLAY]", "V tydzień:  Egzekucja 1",
+    "VI tydzień: Egzekucja 2", "VII tydzień: Egzekucja 3",
+    "VIII tydzień: Egzekucja 4", "IX tydzień: Egzekucja 5",
+    "X tydzień: Egzekucja 6", "XI tydzień: Egzekucja 7 + Pre-offboarding",
+    "XII tydzień: Zamknięcie + Offboarding",
+    "Etap 2: Linkedin", "CV", "Pierwsza rozmowa", "Sukces",
+}
 # Stages negative outcomes
 LOST_STAGES = {"Niegotowy", "Niekwalfikowany/ LOST", "Lead Duch", "Lead niekwalifikowany (setting)", "Rozmowa nie odbyta"}
 

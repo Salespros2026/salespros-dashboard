@@ -66,6 +66,9 @@ class OverviewResponse(BaseModel):
     untrackable_leads: int = 0      # real ale bez Meta paid attribution (IG-organic, direct, inne)
     # Fix #A3: flow metric — wszystkie spotkania w okresie (calendar events startTime in range)
     bookings_in_period: int = 0     # ground truth z GHL Calendar UI (vs kohort `bookings`)
+    # Sales/revenue flow — wszystkie sprzedaże w pipelinach (closing + CS) z opp createdAt w okresie
+    sales_in_period: int = 0         # vs `sales` (paid kohort)
+    revenue_in_period: float = 0.0   # vs `revenue` (paid kohort)
 
     model_config = {"populate_by_name": True}
 
@@ -149,9 +152,12 @@ class CreativeRow(BaseModel):
     revenue: float = 0.0
     cpa: float | None = None
     roas: float | None = None
-    hook_rate: float | None = None  # video_p25 / impressions
-    winner_badge: bool = False
-    loser_badge: bool = False
+    hook_rate: float | None = None    # 3-sec views / impressions (Motion-style)
+    hold_rate: float | None = None    # 15-sec views / 3-sec views
+    health_score: int | None = None   # composite 0-100 (None = za mało danych)
+    health_status: str = "insufficient"  # winner | average | loser | insufficient
+    winner_badge: bool = False        # legacy: real_cpl < 80% avg (zostawiamy backward compat)
+    loser_badge: bool = False         # legacy: real_cpl > 150% avg
 
 
 class CreativesResponse(BaseModel):

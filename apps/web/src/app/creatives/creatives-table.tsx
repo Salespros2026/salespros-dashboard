@@ -120,6 +120,51 @@ const columns: ColumnDef<CreativeRow>[] = [
     header: "Hook",
     cell: ({ getValue }) => fRatio(getValue<number | null>()),
   },
+  {
+    accessorKey: "hold_rate",
+    header: "Hold",
+    cell: ({ getValue }) => fRatio(getValue<number | null>()),
+  },
+  {
+    accessorKey: "health_score",
+    header: "Score",
+    cell: ({ row }) => {
+      const s = row.original.health_score;
+      const status = row.original.health_status;
+      if (s === null || status === "insufficient") {
+        return (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="text-muted-foreground/60 text-xs cursor-help">— ⏳</span>
+            </TooltipTrigger>
+            <TooltipContent>
+              Za mało danych. Wymagany spend ≥ 120 PLN (3× target CPL 40 PLN).
+            </TooltipContent>
+          </Tooltip>
+        );
+      }
+      const color =
+        status === "winner" ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40"
+        : status === "loser" ? "bg-rose-500/20 text-rose-300 border-rose-500/40"
+        : "bg-amber-500/20 text-amber-300 border-amber-500/40";
+      const label =
+        status === "winner" ? "WINNER — skaluj +20%"
+        : status === "loser" ? "LOSER — wyłącz/refresh"
+        : "Średnia";
+      return (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Badge className={color + " font-mono"}>{s}</Badge>
+          </TooltipTrigger>
+          <TooltipContent className="max-w-xs">
+            <div className="font-semibold mb-1">Health Score: {s}/100 — {label}</div>
+            <div className="text-xs text-muted-foreground">Composite: 40% CPL + 20% Hook + 15% Hold + 15% CTR + 10% Freq.</div>
+            <div className="text-xs text-muted-foreground mt-1">Wzór z creative-rules.md sekcja 2 (Motion / Foxwell benchmarks).</div>
+          </TooltipContent>
+        </Tooltip>
+      );
+    },
+  },
 ];
 
 export function CreativesTable({ rows, filters }: { rows: CreativeRow[]; filters: DashboardFilters }) {

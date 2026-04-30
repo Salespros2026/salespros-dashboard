@@ -184,6 +184,8 @@ def overview(
         utm_attributed_leads=agg["totals"].get("utm_attributed_leads", 0),
         paid_unmapped_leads=agg["totals"].get("paid_unmapped_leads", 0),
         untrackable_leads=agg["totals"].get("untrackable_leads", 0),
-        # Fix #A3: flow bookings (calendar events ze startTime w okresie, ground truth)
+        # Fix #A3: flow metrics — bookings/sales/revenue ze wszystkich pipelines
         bookings_in_period=agg["totals"].get("bookings_in_period", 0),
+        sales_in_period=agg["totals"].get("sales_in_period", 0),
+        revenue_in_period=agg["totals"].get("revenue_in_period", 0.0),
     )
