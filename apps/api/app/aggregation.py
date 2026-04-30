@@ -91,7 +91,7 @@ def get_ghl_data(prefer_live: bool = True) -> dict:
     if prefer_live:
         try:
             from .ghl_client import build_ghl_snapshot_like
-            return build_ghl_snapshot_like(days_back=30)
+            return build_ghl_snapshot_like(days_back=60)
         except Exception as e:
             log.warning("Live GHL fetch failed (%s) — fallback snapshot", e)
     from .snapshot_loader import load_ghl_snapshot
@@ -122,6 +122,10 @@ def aggregate_range(meta: dict, ghl: dict, from_date: str, to_date: str) -> dict
         "all_contacts": 0, "real_leads": 0, "ig_sync_ghosts": 0,
         "paid_contacts": 0, "organic_contacts": 0, "other_contacts": 0,
         "bookings": 0, "sales": 0,
+        # Fix #A5: 3-bucket attribution
+        "utm_attributed_leads": 0, "paid_unmapped_leads": 0, "untrackable_leads": 0,
+        # Fix #A3: flow metric (calendar events ze startTime w okresie, niezależnie od daty leada)
+        "bookings_in_period": 0,
     }
     per_ad: dict[str, dict] = {}
     per_campaign: dict[str, dict] = {}
@@ -145,6 +149,10 @@ def aggregate_range(meta: dict, ghl: dict, from_date: str, to_date: str) -> dict
         totals["organic_contacts"] += r["organic_contacts"]
         totals["other_contacts"] += r["other_contacts"]
         totals["bookings"] += len(r["bookings_today"])
+        # Fix #A5: 3-bucket
+        totals["utm_attributed_leads"] += r.get("utm_attributed_leads", 0)
+        totals["paid_unmapped_leads"] += r.get("paid_unmapped_leads", 0)
+        totals["untrackable_leads"] += r.get("untrackable_leads", 0)
         for ad in r["per_ad"]:
             aid = ad["ad_id"]
             row = per_ad.setdefault(aid, {**ad, "leads": 0, "bookings": 0, "sales": 0, "revenue_pln": 0.0, "contacts": []})
@@ -161,6 +169,27 @@ def aggregate_range(meta: dict, ghl: dict, from_date: str, to_date: str) -> dict
             row["bookings"] += c["bookings"]
             row["sales"] += c["sales"]
             row["revenue_pln"] += c.get("revenue_pln", 0.0)
+
+    # Fix #A3: bookings_in_period = wszystkie calendar events ze startTime w okresie
+    # Niezależne od daty leada — flow metric vs kohort metric.
+    from datetime import date as _date
+    from_d = _date.fromisoformat(from_date)
+    to_d = _date.fromisoformat(to_date)
+    bookings_in_period = 0
+    # Reuse z attribution.py jako source of truth (zawiera "cancelled")
+    BOOKED_STATUSES = attribution.BOOKED_APPOINTMENT_STATUSES
+    for e in (ghl.get("calendar_events") or []):
+        status = (e.get("appointmentStatus") or "").strip()
+        if status not in BOOKED_STATUSES:
+            continue
+        st = e.get("startTime") or ""
+        try:
+            st_date = attribution.parse_iso(st).astimezone(attribution.LOCAL_TZ).date()
+        except Exception:
+            continue
+        if from_d <= st_date <= to_d:
+            bookings_in_period += 1
+    totals["bookings_in_period"] = bookings_in_period
 
     # Spend dla całego range — z meta insights account-level (już agregowane przez Meta)
     insights_acct = (meta.get("insights") or {}).get("account") or []

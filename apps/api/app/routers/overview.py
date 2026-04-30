@@ -180,4 +180,10 @@ def overview(
         revenue=revenue_total,
         cpa=(spend / sales_total_for_cpa) if sales_total_for_cpa else None,
         roas=(revenue_total / spend) if spend else None,
+        # Fix #A5: 3-bucket attribution (account-level, brand-agnostic)
+        utm_attributed_leads=agg["totals"].get("utm_attributed_leads", 0),
+        paid_unmapped_leads=agg["totals"].get("paid_unmapped_leads", 0),
+        untrackable_leads=agg["totals"].get("untrackable_leads", 0),
+        # Fix #A3: flow bookings (calendar events ze startTime w okresie, ground truth)
+        bookings_in_period=agg["totals"].get("bookings_in_period", 0),
     )

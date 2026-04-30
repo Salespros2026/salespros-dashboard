@@ -60,6 +60,12 @@ class OverviewResponse(BaseModel):
     revenue: float = 0.0
     cpa: float | None = None  # spend / sales (zamknięte sprzedaże)
     roas: float | None = None  # revenue / spend
+    # Fix #A5: Three-bucket attribution
+    utm_attributed_leads: int = 0   # paid_social + utmContent → mocna attribution per kreacja
+    paid_unmapped_leads: int = 0    # paid_social bez utmContent (Meta wie, my nie wiemy która kreacja)
+    untrackable_leads: int = 0      # real ale bez Meta paid attribution (IG-organic, direct, inne)
+    # Fix #A3: flow metric — wszystkie spotkania w okresie (calendar events startTime in range)
+    bookings_in_period: int = 0     # ground truth z GHL Calendar UI (vs kohort `bookings`)
 
     model_config = {"populate_by_name": True}
 

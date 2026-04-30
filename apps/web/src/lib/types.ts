@@ -43,7 +43,8 @@ export interface OverviewResponse {
   real_cpl: number | null;
   meta_cpl: number | null;
   real_cpb: number | null;
-  bookings: number;
+  bookings: number;                  // kohort: leady dodane w okresie + booked
+  bookings_in_period: number;        // flow: wszystkie spotkania ze startTime w okresie (ground truth)
   sales: number;
   ig_sync_ghosts: number;
   daily_trend: TrendPoint[];
@@ -53,6 +54,10 @@ export interface OverviewResponse {
   revenue: number;
   cpa: number | null;
   roas: number | null;
+  // Fix #A5: 3-bucket attribution
+  utm_attributed_leads: number;      // mocna attribution per kreacja (paid + utmContent)
+  paid_unmapped_leads: number;       // paid bez utmContent
+  untrackable_leads: number;         // organic / direct / inne
 }
 
 export interface CampaignRow {

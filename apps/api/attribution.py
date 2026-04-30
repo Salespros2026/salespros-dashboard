@@ -26,7 +26,7 @@ if _tz_name:
 else:
     LOCAL_TZ = datetime.now().astimezone().tzinfo or ZoneInfo("Europe/Warsaw")
 
-# Stages bookingu (z `SalesPROs closing` pipeline)
+# Stages bookingu (z `SalesPROs closing` pipeline) — fallback gdy brak calendar events
 BOOKING_STAGES = {"Umówiona rozmowa"}
 # Stages sprzedaży
 SALE_STAGES = {"Nowy klient", "Opłacony START"}
@@ -35,6 +35,11 @@ LOST_STAGES = {"Niegotowy", "Niekwalfikowany/ LOST", "Lead Duch", "Lead niekwali
 
 # Pipeline ID głównego pipeline closing (z snapshotu)
 CLOSING_PIPELINE_NAME = "SalesPROs closing"
+
+# Calendar-event statuses które liczą się jako "spotkanie umówione".
+# Calendar = source of truth dla bookingów (Fix #A3: pokrywa 132 vs 81 z pipeline stages).
+# "cancelled" liczone jako booking bo to nadal było UMÓWIONE (potem odwołane) — match z Twoim UI counter.
+BOOKED_APPOINTMENT_STATUSES = {"confirmed", "showed", "noShow", "rescheduled", "cancelled"}
 
 
 def parse_iso(s: str) -> datetime | None:
@@ -166,7 +171,28 @@ def opportunities_for_contact(opportunities: list[dict], contact_id: str) -> lis
     return [o for o in opportunities if o.get("contactId") == contact_id]
 
 
-def is_booked(contact_id: str, opportunities: list[dict], stage_map: dict) -> bool:
+def is_booked(
+    contact_id: str,
+    opportunities: list[dict],
+    stage_map: dict,
+    calendar_events: list[dict] | None = None,
+) -> bool:
+    """Czy contact ma 'umówione spotkanie'?
+
+    Fix #A3: PRIORYTET = calendar_events (source of truth, pokrywa 132 vs 81 z pipeline).
+    Fallback: pipeline stage in BOOKING_STAGES (gdy brak calendar_events albo legacy).
+    """
+    # 1. Calendar events — primary source
+    if calendar_events:
+        for e in calendar_events:
+            if e.get("contactId") != contact_id:
+                continue
+            if (e.get("appointmentStatus") or "").strip() in BOOKED_APPOINTMENT_STATUSES:
+                return True
+        # Jeśli przeszedł przez wszystkie events i nie znalazł → contact nie ma calendar booking.
+        # Jednak nadal sprawdź pipeline (np. legacy contacts bez event w MCP responses)
+
+    # 2. Pipeline fallback
     for o in opportunities_for_contact(opportunities, contact_id):
         sid = o.get("pipelineStageId") or o.get("pipelineStageUId")
         info = stage_map.get(sid, {})
@@ -214,9 +240,18 @@ def aggregate_attribution(meta_snapshot: dict, ghl_snapshot: dict, target_date: 
     organic_contacts = [c for c in contacts_today if is_organic_instagram(c)]
     other_contacts = [c for c in contacts_today if not is_paid_social(c) and not is_organic_instagram(c)]
 
+    # Fix #A5: Three-bucket attribution
+    # 1. utm_attributed: paid_social + utmContent (ad_id) → mocne attribution per kreacja
+    # 2. paid_unmapped: paid_social bez utmContent → wiemy że to Meta, nie wiemy która kreacja
+    # 3. untrackable: real leady bez Meta attribution (IG-organic, direct, inny)
+    utm_attributed_contacts = [c for c in paid_contacts if get_meta_ad_id(c)]
+    paid_unmapped_contacts = [c for c in paid_contacts if not get_meta_ad_id(c)]
+    untrackable_real_contacts = organic_contacts + other_contacts
+
     pipelines = ghl_snapshot.get("pipelines", [])
     stage_map = build_stage_map(pipelines)
     opportunities = ghl_snapshot.get("opportunities", [])
+    calendar_events = ghl_snapshot.get("calendar_events", [])  # Fix #A3: source of truth dla bookings
 
     # Mapowanie Meta ad_id → meta data (spend, name, etc.)
     # Fallback dla lite mode (overview/campaigns endpointy bez full): ads jest pusta,
@@ -232,12 +267,11 @@ def aggregate_attribution(meta_snapshot: dict, ghl_snapshot: dict, target_date: 
     meta_campaign_insights = {ins.get("campaign_id"): ins for ins in meta_snapshot.get("insights", {}).get("campaign", [])}
     meta_campaign_meta = {c["id"]: c for c in meta_snapshot.get("campaigns", [])}
 
-    # Per-ad attribution z paid_contacts
+    # Per-ad attribution z utm_attributed_contacts (Fix #A5: nie miksujemy unmapped do per-ad)
     per_ad = {}
-    for c in paid_contacts:
+    for c in utm_attributed_contacts:
         ad_id = get_meta_ad_id(c)
-        if not ad_id:
-            ad_id = "(unmapped-paid)"
+        # ad_id zawsze != None bo filtrowaliśmy w utm_attributed_contacts
         if ad_id not in per_ad:
             per_ad[ad_id] = {
                 "ad_id": ad_id,
@@ -249,7 +283,7 @@ def aggregate_attribution(meta_snapshot: dict, ghl_snapshot: dict, target_date: 
             }
         per_ad[ad_id]["leads"] += 1
         cid = c.get("id")
-        if is_booked(cid, opportunities, stage_map):
+        if is_booked(cid, opportunities, stage_map, calendar_events):
             per_ad[ad_id]["bookings"] += 1
         if is_sold(cid, opportunities, stage_map):
             per_ad[ad_id]["sales"] += 1
@@ -270,7 +304,7 @@ def aggregate_attribution(meta_snapshot: dict, ghl_snapshot: dict, target_date: 
         # (utmCampaign w pierwszym contact tego ada).
         camp_id_from_meta = meta_meta.get("campaign_id")
         if not camp_id_from_meta and row.get("contacts"):
-            for c in paid_contacts:
+            for c in utm_attributed_contacts:
                 if get_meta_ad_id(c) == ad_id:
                     camp_id_from_meta = get_meta_campaign_id(c)
                     if camp_id_from_meta:
@@ -329,6 +363,10 @@ def aggregate_attribution(meta_snapshot: dict, ghl_snapshot: dict, target_date: 
         "paid_contacts": len(paid_contacts),
         "organic_contacts": len(organic_contacts),
         "other_contacts": len(other_contacts),
+        # Fix #A5: Three-bucket attribution metrics
+        "utm_attributed_leads": len(utm_attributed_contacts),     # paid + utmContent (mocne)
+        "paid_unmapped_leads": len(paid_unmapped_contacts),       # paid bez utmContent (Meta wie kto, my nie wiemy która kreacja)
+        "untrackable_leads": len(untrackable_real_contacts),      # real ale nie Meta paid (IG-organic, direct, inne)
         "per_ad": list(per_ad.values()),
         "per_campaign": list(per_campaign.values()),
         "bookings_today": bookings_today,

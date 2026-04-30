@@ -93,9 +93,9 @@ async function OverviewContent({ filters }: { filters: ReturnType<typeof parseFi
         />
         <KpiCard
           label="Bookingi"
-          value={fInt(data.bookings)}
-          subtitle={`Real CPB: ${fPln(data.real_cpb)} | Sales: ${data.sales}`}
-          tooltip='Booking = opportunity w stage "Umówiona rozmowa" w pipeline SalesPROs closing.'
+          value={fInt(data.bookings_in_period)}
+          subtitle={`Kohort: ${fInt(data.bookings)} | Sales: ${data.sales}`}
+          tooltip='Wszystkie spotkania umówione w tym okresie (calendar events confirmed/showed/noShow/rescheduled/cancelled, ze startTime w zakresie). "Kohort" = bookingi tylko z leadów dodanych w tym okresie.'
         />
       </div>
 
@@ -146,6 +146,46 @@ async function OverviewContent({ filters }: { filters: ReturnType<typeof parseFi
           tooltip='Liczba zamkniętych sprzedaży (opportunity w "Nowy klient" lub "Opłacony START").'
         />
       </div>
+
+      {(() => {
+        const totalAttr = data.utm_attributed_leads + data.paid_unmapped_leads + data.untrackable_leads;
+        if (totalAttr === 0) return null;
+        const utmPct = (data.utm_attributed_leads / totalAttr) * 100;
+        const unmapPct = (data.paid_unmapped_leads / totalAttr) * 100;
+        const untrackPct = (data.untrackable_leads / totalAttr) * 100;
+        return (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Skąd przyszły leady (attribution)</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="flex h-2 w-full overflow-hidden rounded-full bg-muted">
+                <div className="bg-emerald-500" style={{ width: `${utmPct}%` }} title="Meta paid + utm_content" />
+                <div className="bg-amber-500" style={{ width: `${unmapPct}%` }} title="Meta paid bez utm_content" />
+                <div className="bg-slate-500" style={{ width: `${untrackPct}%` }} title="Organic / direct / inne" />
+              </div>
+              <div className="grid grid-cols-3 gap-4 text-sm">
+                <div>
+                  <div className="flex items-center gap-2"><span className="h-2 w-2 rounded-full bg-emerald-500"/><span className="font-medium">{fInt(data.utm_attributed_leads)}</span><span className="text-muted-foreground">({utmPct.toFixed(0)}%)</span></div>
+                  <div className="text-xs text-muted-foreground mt-1">Meta paid + utm_content<br/>→ wiemy z której kreacji</div>
+                </div>
+                <div>
+                  <div className="flex items-center gap-2"><span className="h-2 w-2 rounded-full bg-amber-500"/><span className="font-medium">{fInt(data.paid_unmapped_leads)}</span><span className="text-muted-foreground">({unmapPct.toFixed(0)}%)</span></div>
+                  <div className="text-xs text-muted-foreground mt-1">Meta paid bez utm_content<br/>→ Meta wie, my nie wiemy która kreacja</div>
+                </div>
+                <div>
+                  <div className="flex items-center gap-2"><span className="h-2 w-2 rounded-full bg-slate-500"/><span className="font-medium">{fInt(data.untrackable_leads)}</span><span className="text-muted-foreground">({untrackPct.toFixed(0)}%)</span></div>
+                  <div className="text-xs text-muted-foreground mt-1">Organic IG / direct / inne<br/>→ poza Meta paid</div>
+                </div>
+              </div>
+              <div className="text-xs text-muted-foreground border-t pt-2">
+                Łącznie {fInt(totalAttr)} realnych leadów + {fInt(data.ig_sync_ghosts)} IG-sync ghostów (odfiltrowane).
+                Per-creative metryki w sekcji <strong>Kreacje</strong> używają tylko tych {fInt(data.utm_attributed_leads)} z mocną attribution.
+              </div>
+            </CardContent>
+          </Card>
+        );
+      })()}
 
       <Card>
         <CardHeader>

@@ -53,17 +53,45 @@ def _paged(client: httpx.Client, path: str, params: dict, list_key: str, max_pag
     return out
 
 
-def search_contacts(days_back: int = 14, limit: int = 100) -> list[dict]:
-    """Zwraca kontakty z ostatnich N dni. Używa /contacts/search z body POST,
-    dla prostoty MVP używamy GET /contacts/ paged."""
+def search_contacts(days_back: int = 60, limit: int = 100) -> list[dict]:
+    """Zwraca kontakty utworzone w ostatnich N dni. POST /contacts/search z searchAfter
+    paginacja (GHL ignoruje `page` na GET /contacts/, więc ten wariant zawodzi
+    przy >100 contactach)."""
+    from datetime import datetime, timedelta, timezone
     s = get_settings()
-    with _client() as c:
-        return _paged(
-            c, "/contacts/",
-            {"locationId": s.GHL_LOCATION_ID, "limit": limit},
-            "contacts",
-            max_pages=20,
-        )
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=days_back)).isoformat()
+    contacts: list[dict] = []
+    search_after = None
+    headers = {**_headers(), "Content-Type": "application/json"}
+    with httpx.Client(base_url=BASE, headers=headers, timeout=httpx.Timeout(30.0)) as c:
+        for page in range(1, 51):  # safety cap 50 pages × 100 = 5000
+            body: dict = {
+                "locationId": s.GHL_LOCATION_ID,
+                "pageLimit": limit,
+                "sort": [{"field": "dateAdded", "direction": "desc"}],
+            }
+            if search_after:
+                body["searchAfter"] = search_after
+            r = c.post("/contacts/search", json=body)
+            if r.status_code == 429:
+                log.warning("GHL 429 — backoff 2s")
+                time.sleep(2)
+                continue
+            r.raise_for_status()
+            data = r.json()
+            batch = data.get("contacts", [])
+            if not batch:
+                break
+            contacts.extend(batch)
+            oldest = batch[-1].get("dateAdded", "")
+            if oldest < cutoff:
+                # Przytnij do cutoff i wyjdź
+                contacts = [c for c in contacts if (c.get("dateAdded") or "") >= cutoff]
+                break
+            search_after = batch[-1].get("searchAfter")
+            if not search_after:
+                break
+    return contacts
 
 
 def get_pipelines() -> list[dict]:
@@ -119,9 +147,10 @@ def get_custom_fields() -> list[dict]:
         return r.json().get("customFields", [])
 
 
-def build_ghl_snapshot_like(days_back: int = 14) -> dict:
+def build_ghl_snapshot_like(days_back: int = 60) -> dict:
     """Struktura zgodna z `snapshots/ghl-YYYY-MM-DD.json`.
-    Parallel fetch 5 niezależnych endpointów + calendar events per calendar."""
+    Parallel fetch 5 niezależnych endpointów + calendar events per calendar.
+    days_back=60 daje pełny miesiąc + miesiąc baseline."""
     s = get_settings()
 
     # Faza 1 — 5 endpointów równolegle (contacts, pipelines, opps, calendars, custom fields).

@@ -159,6 +159,7 @@ def creative_detail(
     import attribution  # type: ignore
     stage_map = attribution.build_stage_map(pipelines)
     opportunities = agg["_ghl_raw"].get("opportunities") or []
+    calendar_events = agg["_ghl_raw"].get("calendar_events") or []  # Fix #A3
 
     for c in agg["_ghl_raw"].get("contacts") or []:
         if not (c.get("email") or c.get("phone")):
@@ -180,7 +181,7 @@ def creative_detail(
             email=c.get("email"),
             phone=c.get("phone"),
             date_added=c.get("dateAdded") or "",
-            booked=attribution.is_booked(cid, opportunities, stage_map),
+            booked=attribution.is_booked(cid, opportunities, stage_map, calendar_events),
             sold=attribution.is_sold(cid, opportunities, stage_map),
             ghl_url=GHL_CONTACT_URL.format(loc=settings.GHL_LOCATION_ID, cid=cid),
         ))
