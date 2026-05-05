@@ -3,6 +3,7 @@ import { Suspense } from "react";
 import { AlertTriangle } from "lucide-react";
 
 import { FilterBar } from "@/components/filter-bar";
+import { InsightsPanel } from "@/components/insights-panel";
 import { KpiCard } from "@/components/kpi-card";
 import { TrendChart } from "@/components/trend-chart";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -43,6 +44,11 @@ async function OverviewContent({ filters }: { filters: ReturnType<typeof parseFi
 
   return (
     <div className="space-y-6">
+      {/* AI Insights — codzienne sugestie od claude-sonnet-4.5 (top of overview) */}
+      <Suspense fallback={<Card><CardContent className="py-3 text-xs text-muted-foreground">Ładowanie AI Insights…</CardContent></Card>}>
+        <InsightsPanelLoader />
+      </Suspense>
+
       {split && split.untagged_count > 0 && (
         <Card className="border-amber-500/40 bg-amber-500/5">
           <CardContent className="py-3 flex items-center gap-3">
@@ -147,6 +153,11 @@ async function OverviewContent({ filters }: { filters: ReturnType<typeof parseFi
         />
       </div>
 
+      {/* Historyczny trend CPL — pokazuje czy "20 PLN ostatnio" to OK vs poprzednie miesiące */}
+      <Suspense fallback={<Card><CardContent className="py-3 text-xs text-muted-foreground">Ładowanie historii…</CardContent></Card>}>
+        <HistoricalContextCard />
+      </Suspense>
+
       {(() => {
         const totalAttr = data.utm_attributed_leads + data.paid_unmapped_leads + data.untrackable_leads;
         if (totalAttr === 0) return null;
@@ -207,6 +218,67 @@ async function OverviewContent({ filters }: { filters: ReturnType<typeof parseFi
 async function FilterBarFromOverview({ filters }: { filters: ReturnType<typeof parseFilters> }) {
   const data = await api.overview(filters).catch(() => null);
   return <FilterBar lastUpdated={data?.last_updated_iso ?? null} />;
+}
+
+async function InsightsPanelLoader() {
+  const data = await api.insights().catch(() => null);
+  return <InsightsPanel data={data} />;
+}
+
+async function HistoricalContextCard() {
+  const h = await api.historicalContext().catch(() => null);
+  if (!h) return null;
+  const cur = h.periods.find((p) => p.label === "current_7d");
+  const prev30 = h.periods.find((p) => p.label === "prev_30d");
+  const prev90 = h.periods.find((p) => p.label === "prev_90d");
+  const yearAgo = h.periods.find((p) => p.label === "year_ago_30d");
+
+  const arrow = (delta: number | null) => {
+    if (delta === null) return null;
+    const color = delta > 10 ? "text-rose-400" : delta < -10 ? "text-emerald-400" : "text-muted-foreground";
+    const sym = delta > 0 ? "↑" : delta < 0 ? "↓" : "→";
+    return <span className={`text-xs ${color}`}>{sym} {Math.abs(delta).toFixed(0)}%</span>;
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Trend historyczny CPL (12 mc)</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <div>
+            <div className="text-xs text-muted-foreground">Ostatnie 7 dni</div>
+            <div className="font-mono text-2xl mt-1">{fPln(cur?.cpl ?? null)}</div>
+            <div className="text-xs text-muted-foreground mt-1">{fInt(cur?.leads ?? 0)} leadów / {fPln(cur?.spend ?? null)}</div>
+          </div>
+          <div>
+            <div className="text-xs text-muted-foreground">Średnia 30d (8-37 dni temu)</div>
+            <div className="font-mono text-xl mt-1">{fPln(prev30?.cpl ?? null)}</div>
+            <div className="mt-1">{arrow(h.delta_cpl_vs_30d_pct)}</div>
+          </div>
+          <div>
+            <div className="text-xs text-muted-foreground">Średnia 90d</div>
+            <div className="font-mono text-xl mt-1">{fPln(prev90?.cpl ?? null)}</div>
+            <div className="text-xs text-muted-foreground mt-1">{fInt(prev90?.leads ?? 0)} leadów</div>
+          </div>
+          <div>
+            <div className="text-xs text-muted-foreground">Rok temu (ten sam okres)</div>
+            <div className="font-mono text-xl mt-1">{fPln(yearAgo?.cpl ?? null)}</div>
+            <div className="mt-1">{arrow(h.delta_cpl_vs_year_pct)}</div>
+          </div>
+        </div>
+        <div className="text-xs text-muted-foreground mt-3 border-t pt-2">
+          Cache 24h. Wygenerowane: {new Date(h.generated_at).toLocaleString("pl-PL")}.
+          {h.delta_cpl_vs_30d_pct !== null && Math.abs(h.delta_cpl_vs_30d_pct) > 30 && (
+            <span className="ml-2 text-amber-400">
+              ⚠️ CPL {h.delta_cpl_vs_30d_pct > 0 ? "wzrósł" : "spadł"} o {Math.abs(h.delta_cpl_vs_30d_pct).toFixed(0)}% vs śr. 30d — sprawdź co się zmieniło.
+            </span>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
 }
 
 export default async function Page({ searchParams }: Props) {

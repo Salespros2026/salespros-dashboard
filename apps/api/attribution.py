@@ -28,6 +28,21 @@ else:
 
 # Stages bookingu (z `SalesPROs closing` pipeline) — fallback gdy brak calendar events
 BOOKING_STAGES = {"Umówiona rozmowa"}
+
+# Tags ustawiane przez workflow Gawronify w GHL "Viral Partners Integracja".
+# Deterministyczny sygnał statusu leada — niezależny od zmian nazw stages.
+# Mapowanie z 4 workflow (workflow → trigger stage → tag):
+TAG_SOLD = "sprzedaż1"                          # "sprzedaz" workflow → "Opłacony START" → ten tag
+TAG_ROZMOWA_DISQ = "rozmowa-niekwalifikowana"   # "Rozmowa niekwalifikowana" → "Niekwalfikowany/ LOST"
+TAG_NO_SHOW = "rozmowa-nie-odbyta"              # "rozmowa-nie-odbyta" → "Rozmowa nie odbyta"
+TAG_PRE_CALL_DISQ = "niekwalifikowany-lead"     # "Niekwalifikowany lead" → "Lead niekwalifikowany (setting)"
+
+# Wartości statusu zwracane przez get_lead_status (priorytet od najgorszego do najlepszego).
+LEAD_STATUS_SOLD = "sold"
+LEAD_STATUS_ROZMOWA_DISQ = "rozmowa_disq"
+LEAD_STATUS_NO_SHOW = "no_show"
+LEAD_STATUS_PRE_CALL_DISQ = "pre_call_disq"
+LEAD_STATUS_IN_PROGRESS = "in_progress"  # brak terminal tagu — w pipeline lub jeszcze pracuje
 # Stages sprzedaży — oznaczają "klient kupił" (closing pipeline + CS pipeline weszli na onboarding)
 SALE_STAGES = {
     # SalesPROs closing
@@ -240,13 +255,33 @@ def is_booked(
     return False
 
 
-def is_sold(contact_id: str, opportunities: list[dict], stage_map: dict) -> bool:
+def is_sold(contact_id: str, opportunities: list[dict], stage_map: dict, contact: dict | None = None) -> bool:
+    """Sale = (stage in SALE_STAGES) OR (tag TAG_SOLD na kontakcie).
+    Tag jako fallback gdy workflow odpalił ale opp został usunięty/zmodyfikowany."""
     for o in opportunities_for_contact(opportunities, contact_id):
         sid = o.get("pipelineStageId") or o.get("pipelineStageUId")
         info = stage_map.get(sid, {})
         if info.get("stage_name") in SALE_STAGES:
             return True
+    if contact and TAG_SOLD in (contact.get("tags") or []):
+        return True
     return False
+
+
+def get_lead_status(contact: dict) -> str:
+    """Zwraca terminal status leada na bazie tagów workflow Gawronify.
+    Priorytet: sold > rozmowa_disq > no_show > pre_call_disq > in_progress.
+    Lead może mieć kilka tagów — bierzemy najbardziej "zaawansowany" w funnel."""
+    tags = set(contact.get("tags") or [])
+    if TAG_SOLD in tags:
+        return LEAD_STATUS_SOLD
+    if TAG_ROZMOWA_DISQ in tags:
+        return LEAD_STATUS_ROZMOWA_DISQ
+    if TAG_NO_SHOW in tags:
+        return LEAD_STATUS_NO_SHOW
+    if TAG_PRE_CALL_DISQ in tags:
+        return LEAD_STATUS_PRE_CALL_DISQ
+    return LEAD_STATUS_IN_PROGRESS
 
 
 def revenue_for_contact(contact_id: str, opportunities: list[dict], stage_map: dict) -> float:
@@ -315,15 +350,24 @@ def aggregate_attribution(meta_snapshot: dict, ghl_snapshot: dict, target_date: 
                 "bookings": 0,
                 "sales": 0,
                 "revenue_pln": 0.0,
+                "status_breakdown": {
+                    LEAD_STATUS_SOLD: 0,
+                    LEAD_STATUS_ROZMOWA_DISQ: 0,
+                    LEAD_STATUS_NO_SHOW: 0,
+                    LEAD_STATUS_PRE_CALL_DISQ: 0,
+                    LEAD_STATUS_IN_PROGRESS: 0,
+                },
                 "contacts": [],
             }
         per_ad[ad_id]["leads"] += 1
         cid = c.get("id")
         if is_booked(cid, opportunities, stage_map, calendar_events):
             per_ad[ad_id]["bookings"] += 1
-        if is_sold(cid, opportunities, stage_map):
+        if is_sold(cid, opportunities, stage_map, contact=c):
             per_ad[ad_id]["sales"] += 1
             per_ad[ad_id]["revenue_pln"] += revenue_for_contact(cid, opportunities, stage_map)
+        # Tag-based funnel breakdown (workflow Gawronify)
+        per_ad[ad_id]["status_breakdown"][get_lead_status(c)] += 1
         per_ad[ad_id]["contacts"].append({
             "id": cid,
             "name": ((c.get("firstName") or "") + " " + (c.get("lastName") or "")).strip() or c.get("email", ""),

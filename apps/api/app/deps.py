@@ -51,6 +51,24 @@ class Settings(BaseSettings):
     # Lokal: względem cwd
     CLASSIFICATION_FILE_PATH: str = "data/campaign_classification.json"
 
+    # Lista contactID do wykluczenia z sales/bookings/leads (test contacts, duplikaty).
+    # Comma-separated. Przykład: "yZIOFYh8UdPRXIbeNvPB,abc123,xyz789"
+    EXCLUDED_CONTACT_IDS: str = ""
+
+    # Default cena pakietu START gdy GHL workflow Gawronify nie zapisał monetaryValue.
+    # User confirmed: wszyscy klienci (poza testowymi) płacą 6900 PLN za START.
+    DEFAULT_SALE_PRICE_PLN: float = 6900.0
+
+    # Anthropic API key (dla AI Insights — codzienny brief)
+    ANTHROPIC_API_KEY: str | None = None
+
+    # Slack webhook (dla daily morning brief)
+    SLACK_WEBHOOK_URL: str | None = None
+
+    @property
+    def excluded_contact_ids(self) -> set[str]:
+        return set(filter(None, (self.EXCLUDED_CONTACT_IDS or "").split(",")))
+
     @property
     def cors_origins(self) -> list[str]:
         return [o.strip() for o in self.CORS_ALLOW_ORIGINS.split(",") if o.strip()]

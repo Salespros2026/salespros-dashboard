@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from .deps import get_settings
-from .routers import admin, adsets, campaigns, creatives, funnel, overview, refresh
+from .routers import admin, adsets, campaigns, creatives, funnel, historical, insights, overview, refresh
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s — %(message)s")
 log = logging.getLogger("api")
@@ -84,3 +84,5 @@ app.include_router(creatives.router, prefix="/api")
 app.include_router(funnel.router, prefix="/api")
 app.include_router(refresh.router, prefix="/api")
 app.include_router(admin.router, prefix="/api")
+app.include_router(historical.router, prefix="/api")
+app.include_router(insights.router, prefix="/api")

@@ -238,3 +238,48 @@ class AdminSetTypeResponse(BaseModel):
     campaign_id: str
     campaign_type: str
     is_manual: bool
+
+
+class HistoricalPeriod(BaseModel):
+    label: str            # "current_7d" | "prev_30d" | "prev_90d" | "year_ago_30d"
+    from_: str = ""       # YYYY-MM-DD
+    to: str = ""
+    spend: float
+    leads: int
+    cpl: float | None
+
+    model_config = {"populate_by_name": True}
+
+
+class HistoricalContextResponse(BaseModel):
+    periods: list[HistoricalPeriod]
+    delta_cpl_vs_30d_pct: float | None    # current_7d.cpl vs prev_30d.cpl, np. +67% gdy CPL rośnie
+    delta_cpl_vs_year_pct: float | None
+    generated_at: str
+
+
+class Insight(BaseModel):
+    severity: str                    # "winner" | "warn" | "critical" | "info"
+    title: str
+    why: str                         # 2-3 zdania uzasadnienia z liczbami
+    action: str                      # konkretna akcja
+    ad_id: str | None = None
+
+
+class AccountSummary(BaseModel):
+    spend: float | None = None
+    real_leads: int | None = None
+    real_cpl: float | None = None
+    bookings: int | None = None
+    sales: int | None = None
+    revenue: float | None = None
+    roas: float | None = None
+
+
+class InsightsResponse(BaseModel):
+    insights: list[Insight]
+    generated_at: str | None
+    stale: bool                      # True jeśli pokazujemy starsze niż dziś
+    date: str | None                 # data dla której wygenerowano
+    account_summary: AccountSummary | None = None
+    model: str | None = None         # np. "anthropic/claude-sonnet-4.5"

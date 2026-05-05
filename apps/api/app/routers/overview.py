@@ -180,9 +180,11 @@ def overview(
         cost_per_booking_retarget=(spend_by_type["retarget"] / bookings_by_type["retarget"]) if bookings_by_type["retarget"] else None,
     )
 
-    # Top-level revenue + CPA + ROAS (sumy z brand-filtered scope)
-    revenue_total = revenue_by_type["acquisition"] + revenue_by_type["retarget"] + revenue_by_type["unknown"]
-    sales_total_for_cpa = sales_by_type["acquisition"] + sales_by_type["retarget"] + sales_by_type["unknown"]
+    # Top-level revenue + CPA + ROAS — używamy FLOW metric (sales_in_period + revenue_in_period)
+    # zamiast kohort (revenue_total z paid_contacts only). Kohort liczy tylko leady z UTM,
+    # ale realne sales przychodzą też z organic / direct / starych contactów.
+    revenue_flow = agg["totals"].get("revenue_in_period", 0.0)
+    sales_flow = agg["totals"].get("sales_in_period", 0)
 
     return OverviewResponse(
         from_=from_, to=to, tz=tz,
@@ -199,9 +201,9 @@ def overview(
         last_updated_iso=datetime.utcnow().isoformat() + "Z",
         data_source="live" if prefer_live else "snapshot",
         split=split,
-        revenue=revenue_total,
-        cpa=(spend / sales_total_for_cpa) if sales_total_for_cpa else None,
-        roas=(revenue_total / spend) if spend else None,
+        revenue=revenue_flow,
+        cpa=(spend / sales_flow) if sales_flow else None,
+        roas=(revenue_flow / spend) if spend else None,
         # Fix #A5: 3-bucket attribution (account-level, brand-agnostic)
         utm_attributed_leads=agg["totals"].get("utm_attributed_leads", 0),
         paid_unmapped_leads=agg["totals"].get("paid_unmapped_leads", 0),

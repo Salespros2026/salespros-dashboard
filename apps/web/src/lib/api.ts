@@ -11,6 +11,8 @@ import type {
   CreativeDetailResponse,
   CreativesResponse,
   FunnelResponse,
+  HistoricalContextResponse,
+  InsightsResponse,
   OverviewResponse,
 } from "./types";
 
@@ -70,4 +72,6 @@ export const api = {
     get<CreativeDetailResponse>(`/api/creatives/${encodeURIComponent(ad_id)}`, f),
   funnel: (f: RangeFilters) => get<FunnelResponse>("/api/funnel", f),
   adminCampaigns: () => getNoFilters<AdminCampaignsResponse>("/api/admin/campaigns"),
+  historicalContext: () => getNoFilters<HistoricalContextResponse>("/api/historical-context"),
+  insights: () => getNoFilters<InsightsResponse>("/api/insights"),
 };

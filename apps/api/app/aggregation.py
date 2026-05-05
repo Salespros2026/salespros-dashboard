@@ -197,6 +197,10 @@ def aggregate_range(meta: dict, ghl: dict, from_date: str, to_date: str) -> dict
     # Per-creative sales zostaje paid-only (bo organic nie ma kreacji), ale top KPI
     # powinno pokazywać wszystkie sprzedaże w pipelinie (closing + CS).
     # Liczymy opportunities z createdAt w okresie + stage in SALE_STAGES.
+    settings = get_settings()
+    excluded_ids = settings.excluded_contact_ids  # test contacts (np. Kamila Żak)
+    default_sale_price = settings.DEFAULT_SALE_PRICE_PLN  # fallback gdy GHL workflow nie wpisał monetaryValue
+
     total_sales_in_period = 0
     total_revenue_in_period = 0.0
     pipelines_for_stages = (ghl.get("pipelines") or [])
@@ -221,13 +225,19 @@ def aggregate_range(meta: dict, ghl: dict, from_date: str, to_date: str) -> dict
         if not (from_d <= created_date <= to_d):
             continue
         cid = o.get("contactId")
+        # Wyklucz test contacts (np. Kamila Żak — env var EXCLUDED_CONTACT_IDS)
+        if cid and cid in excluded_ids:
+            continue
         if cid and cid in seen_contact_for_sale:
             continue
         if cid:
             seen_contact_for_sale.add(cid)
         total_sales_in_period += 1
+        # Fallback: jeśli GHL workflow nie wpisał monetaryValue, użyj DEFAULT_SALE_PRICE_PLN
+        # (user confirmed: wszyscy klienci poza testowymi płacą 6900 PLN za pakiet START)
         try:
-            total_revenue_in_period += float(o.get("monetaryValue") or 0)
+            val = float(o.get("monetaryValue") or 0)
+            total_revenue_in_period += (val if val > 0 else default_sale_price)
         except (TypeError, ValueError):
             pass
     totals["sales_in_period"] = total_sales_in_period

@@ -209,6 +209,49 @@ export interface AdminCampaignRow {
   suggested_type: CampaignType;
 }
 
+export interface HistoricalPeriod {
+  label: string;
+  from_: string;
+  to: string;
+  spend: number;
+  leads: number;
+  cpl: number | null;
+}
+
+export interface HistoricalContextResponse {
+  periods: HistoricalPeriod[];
+  delta_cpl_vs_30d_pct: number | null;
+  delta_cpl_vs_year_pct: number | null;
+  generated_at: string;
+}
+
+export interface Insight {
+  severity: "winner" | "warn" | "critical" | "info" | string;
+  title: string;
+  why: string;
+  action: string;
+  ad_id: string | null;
+}
+
+export interface AccountSummary {
+  spend: number | null;
+  real_leads: number | null;
+  real_cpl: number | null;
+  bookings: number | null;
+  sales: number | null;
+  revenue: number | null;
+  roas: number | null;
+}
+
+export interface InsightsResponse {
+  insights: Insight[];
+  generated_at: string | null;
+  stale: boolean;
+  date: string | null;
+  account_summary: AccountSummary | null;
+  model: string | null;
+}
+
 export interface AdminCampaignsResponse {
   campaigns: AdminCampaignRow[];
   untagged_count: number;
