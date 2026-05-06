@@ -12,8 +12,15 @@ log = logging.getLogger("snapshot_loader")
 
 
 def _list_meta_snapshots(snap_dir: Path) -> list[Path]:
+    """Meta snapshot ma nazwę `YYYY-MM-DD.json` (bez prefix).
+    Wykluczamy ghl-*, insights-*, historical_*, *.bak.* — to są inne pliki które tu się znalazły.
+    """
+    EXCLUDED_PREFIXES = ("ghl-", "insights-", "historical_")
     return sorted(
-        [p for p in snap_dir.glob("*.json") if not p.name.startswith("ghl-") and ".bak." not in p.name],
+        [
+            p for p in snap_dir.glob("*.json")
+            if not p.name.startswith(EXCLUDED_PREFIXES) and ".bak." not in p.name
+        ],
         reverse=True,
     )
 
