@@ -7,9 +7,10 @@ custom fields, calendar events.
 from __future__ import annotations
 
 import logging
+import random
 import time
 from concurrent.futures import ThreadPoolExecutor
-from typing import Any
+from typing import Any, Callable
 
 import httpx
 
@@ -33,16 +34,24 @@ def _client() -> httpx.Client:
     return httpx.Client(base_url=BASE, headers=_headers(), timeout=httpx.Timeout(30.0))
 
 
+def _request_with_retry(callable_: Callable[[], httpx.Response], *, max_retries: int = 5) -> httpx.Response:
+    """Wrapper z exponential backoff dla GHL 429. Bez tego pętla bez końca przy stałym rate limicie."""
+    for attempt in range(max_retries):
+        r = callable_()
+        if r.status_code != 429:
+            return r
+        delay = min(2 ** attempt, 16) + random.random()
+        log.warning("GHL 429 — retry %s/%s in %.1fs", attempt + 1, max_retries, delay)
+        time.sleep(delay)
+    raise RuntimeError(f"GHL rate limit retry budget exhausted ({max_retries} attempts)")
+
+
 def _paged(client: httpx.Client, path: str, params: dict, list_key: str, max_pages: int = 50) -> list[dict]:
     out: list[dict] = []
     page = 1
     while page <= max_pages:
         p = {**params, "page": page}
-        r = client.get(path, params=p)
-        if r.status_code == 429:
-            log.warning("GHL 429 — backoff 2s")
-            time.sleep(2)
-            continue
+        r = _request_with_retry(lambda: client.get(path, params=p))
         r.raise_for_status()
         body = r.json()
         items = body.get(list_key, [])
@@ -72,11 +81,7 @@ def search_contacts(days_back: int = 60, limit: int = 100) -> list[dict]:
             }
             if search_after:
                 body["searchAfter"] = search_after
-            r = c.post("/contacts/search", json=body)
-            if r.status_code == 429:
-                log.warning("GHL 429 — backoff 2s")
-                time.sleep(2)
-                continue
+            r = _request_with_retry(lambda: c.post("/contacts/search", json=body))
             r.raise_for_status()
             data = r.json()
             batch = data.get("contacts", [])

@@ -18,13 +18,12 @@ import os
 from datetime import datetime, timezone, timedelta
 from zoneinfo import ZoneInfo
 
-# Strefa czasowa do interpretacji "dziś" — biznes Salespros jest w Polsce, ale user może być
-# w podróży. Default = system local. Override przez env var REPORT_TIMEZONE.
-_tz_name = os.environ.get("REPORT_TIMEZONE")
-if _tz_name:
-    LOCAL_TZ = ZoneInfo(_tz_name)
-else:
-    LOCAL_TZ = datetime.now().astimezone().tzinfo or ZoneInfo("Europe/Warsaw")
+# Strefa czasowa biznesowa — twardo Europe/Warsaw, niezależnie od strefy hosta.
+# Bez tego pipeline na hoście w innej strefie (np. WITA) liczył dni inaczej niż Meta (Warszawa),
+# co generowało rozjazdy ±1 dzień w bookingach i drilldownie.
+# Override przez env var REPORT_TIMEZONE (np. dla testów lub innego rynku).
+BUSINESS_TZ = ZoneInfo(os.environ.get("REPORT_TIMEZONE", "Europe/Warsaw"))
+LOCAL_TZ = BUSINESS_TZ  # backward-compat alias dla istniejących importów
 
 # Stages bookingu (z `SalesPROs closing` pipeline) — fallback gdy brak calendar events
 BOOKING_STAGES = {"Umówiona rozmowa"}
@@ -67,6 +66,16 @@ CLOSING_PIPELINE_NAME = "SalesPROs closing"
 # Calendar = source of truth dla bookingów (Fix #A3: pokrywa 132 vs 81 z pipeline stages).
 # "cancelled" liczone jako booking bo to nadal było UMÓWIONE (potem odwołane) — match z Twoim UI counter.
 BOOKED_APPOINTMENT_STATUSES = {"confirmed", "showed", "noShow", "rescheduled", "cancelled"}
+
+# Sale = stage z SALE_STAGES + opportunity.status == closed-won.
+# Sam stage nie wystarczy: opportunity może być w stage'u sprzedażowym z status="open" (handel w toku)
+# albo cofnięta z won → open. GHL zwraca status w jednym z poniższych wariantów (case-insensitive).
+WON_STATUSES = {"won", "closed-won", "closed_won"}
+
+
+def is_closed_won(opportunity: dict) -> bool:
+    """True jeśli opportunity ma status oznaczający wygraną sprzedaż."""
+    return (opportunity.get("status") or "").strip().lower() in WON_STATUSES
 
 
 def parse_iso(s: str) -> datetime | None:
@@ -157,13 +166,27 @@ def is_organic_instagram(contact: dict) -> bool:
     return False
 
 
+def get_meta_ad_ids(contact: dict) -> set[str]:
+    """Wszystkie unikalne Meta ad_id widoczne na kontakcie (z attributions[] + legacy)."""
+    return {
+        str(a["utmContent"])
+        for a in _attr_sources(contact)
+        if a.get("utmContent")
+    }
+
+
+def has_ambiguous_meta_ad_id(contact: dict) -> bool:
+    """True jeśli kontakt ma >1 unikalny ad_id — multi-touch, nie da się jednoznacznie przypisać."""
+    return len(get_meta_ad_ids(contact)) > 1
+
+
 def get_meta_ad_id(contact: dict) -> str | None:
-    """Wyciąga Meta ad ID (utmContent) z kontaktu."""
-    for a in _attr_sources(contact):
-        ad_id = a.get("utmContent")
-        if ad_id:
-            return str(ad_id)
-    return None
+    """Zwraca ad_id TYLKO gdy attribution jest jednoznaczna (dokładnie 1 ad_id).
+    Przy multi-touch zwraca None — taki lead wpada do ambiguous bucket, nie do per-ad CPL.
+    Wcześniej brany był pierwszy element listy, co było niedeterministyczne biznesowo
+    (zmiana kolejności w GHL = zmiana przypisania kreacji)."""
+    ids = get_meta_ad_ids(contact)
+    return next(iter(ids)) if len(ids) == 1 else None
 
 
 def get_meta_campaign_id(contact: dict) -> str | None:
@@ -256,14 +279,17 @@ def is_booked(
 
 
 def is_sold(contact_id: str, opportunities: list[dict], stage_map: dict, contact: dict | None = None) -> bool:
-    """Sale = (stage in SALE_STAGES) OR (tag TAG_SOLD na kontakcie).
-    Tag jako fallback gdy workflow odpalił ale opp został usunięty/zmodyfikowany."""
-    for o in opportunities_for_contact(opportunities, contact_id):
+    """Sale = (stage in SALE_STAGES AND opportunity.status closed-won) OR
+    (tag TAG_SOLD i brak opportunities w ogóle).
+    Tag jako fallback tylko gdy nie ma żadnego opp — chroni przed cofniętym dealem,
+    który zostawił tag ale opp wrócił do "open" / "abandoned"."""
+    opps = list(opportunities_for_contact(opportunities, contact_id))
+    for o in opps:
         sid = o.get("pipelineStageId") or o.get("pipelineStageUId")
         info = stage_map.get(sid, {})
-        if info.get("stage_name") in SALE_STAGES:
+        if info.get("stage_name") in SALE_STAGES and is_closed_won(o):
             return True
-    if contact and TAG_SOLD in (contact.get("tags") or []):
+    if contact and not opps and TAG_SOLD in (contact.get("tags") or []):
         return True
     return False
 
@@ -285,13 +311,13 @@ def get_lead_status(contact: dict) -> str:
 
 
 def revenue_for_contact(contact_id: str, opportunities: list[dict], stage_map: dict) -> float:
-    """Suma monetaryValue z opportunities danego contacta które są w SALE_STAGES.
-    Jeden contact może mieć kilka opp (np. upsell) — sumujemy wszystkie sold."""
+    """Suma monetaryValue z opportunities danego contacta które są closed-won w SALE_STAGES.
+    Jeden contact może mieć kilka opp (np. upsell) — sumujemy wszystkie wygrane."""
     total = 0.0
     for o in opportunities_for_contact(opportunities, contact_id):
         sid = o.get("pipelineStageId") or o.get("pipelineStageUId")
         info = stage_map.get(sid, {})
-        if info.get("stage_name") not in SALE_STAGES:
+        if info.get("stage_name") not in SALE_STAGES or not is_closed_won(o):
             continue
         try:
             total += float(o.get("monetaryValue") or 0)
@@ -311,12 +337,14 @@ def aggregate_attribution(meta_snapshot: dict, ghl_snapshot: dict, target_date: 
     organic_contacts = [c for c in contacts_today if is_organic_instagram(c)]
     other_contacts = [c for c in contacts_today if not is_paid_social(c) and not is_organic_instagram(c)]
 
-    # Fix #A5: Three-bucket attribution
-    # 1. utm_attributed: paid_social + utmContent (ad_id) → mocne attribution per kreacja
-    # 2. paid_unmapped: paid_social bez utmContent → wiemy że to Meta, nie wiemy która kreacja
-    # 3. untrackable: real leady bez Meta attribution (IG-organic, direct, inny)
-    utm_attributed_contacts = [c for c in paid_contacts if get_meta_ad_id(c)]
-    paid_unmapped_contacts = [c for c in paid_contacts if not get_meta_ad_id(c)]
+    # Four-bucket attribution (fail-closed na multi-touch):
+    # 1. utm_attributed: paid_social + dokładnie 1 ad_id → mocne attribution per kreacja
+    # 2. ambiguous_paid: paid_social + >1 ad_id (multi-touch) → nie atrybutujemy do żadnej kreacji
+    # 3. paid_unmapped: paid_social bez utmContent → wiemy że to Meta, nie wiemy która kreacja
+    # 4. untrackable: real leady bez Meta attribution (IG-organic, direct, inny)
+    utm_attributed_contacts = [c for c in paid_contacts if len(get_meta_ad_ids(c)) == 1]
+    ambiguous_paid_contacts = [c for c in paid_contacts if has_ambiguous_meta_ad_id(c)]
+    paid_unmapped_contacts = [c for c in paid_contacts if not get_meta_ad_ids(c)]
     untrackable_real_contacts = organic_contacts + other_contacts
 
     pipelines = ghl_snapshot.get("pipelines", [])
@@ -443,8 +471,9 @@ def aggregate_attribution(meta_snapshot: dict, ghl_snapshot: dict, target_date: 
         "paid_contacts": len(paid_contacts),
         "organic_contacts": len(organic_contacts),
         "other_contacts": len(other_contacts),
-        # Fix #A5: Three-bucket attribution metrics
-        "utm_attributed_leads": len(utm_attributed_contacts),     # paid + utmContent (mocne)
+        # Four-bucket attribution metrics
+        "utm_attributed_leads": len(utm_attributed_contacts),     # paid + dokładnie 1 ad_id (mocne)
+        "ambiguous_paid_leads": len(ambiguous_paid_contacts),     # paid + >1 ad_id (multi-touch, niedeterministyczne)
         "paid_unmapped_leads": len(paid_unmapped_contacts),       # paid bez utmContent (Meta wie kto, my nie wiemy która kreacja)
         "untrackable_leads": len(untrackable_real_contacts),      # real ale nie Meta paid (IG-organic, direct, inne)
         "per_ad": list(per_ad.values()),

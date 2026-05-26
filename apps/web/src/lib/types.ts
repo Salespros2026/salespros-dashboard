@@ -61,10 +61,18 @@ export interface OverviewResponse {
   revenue: number;
   cpa: number | null;
   roas: number | null;
-  // Fix #A5: 3-bucket attribution
-  utm_attributed_leads: number;      // mocna attribution per kreacja (paid + utmContent)
+  // 4-bucket attribution (fail-closed multi-touch)
+  utm_attributed_leads: number;      // paid + dokładnie 1 ad_id → mocna attribution per kreacja
+  ambiguous_paid_leads: number;      // paid + >1 ad_id (multi-touch) — nie atrybutowane do kreacji
   paid_unmapped_leads: number;       // paid bez utmContent
   untrackable_leads: number;         // organic / direct / inne
+  // Data quality — niepusta lista oznacza że snapshoty Meta/GHL mają braki (puste insights itp.).
+  data_quality_issues: string[];
+  // Cohort vs flow (explicit, żeby UI nie mieszał metryk)
+  cohort_bookings: number;
+  flow_bookings: number;
+  cohort_sales: number;
+  flow_sales: number;
 }
 
 export interface CampaignRow {

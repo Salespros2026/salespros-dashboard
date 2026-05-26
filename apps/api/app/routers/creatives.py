@@ -2,8 +2,14 @@
 from __future__ import annotations
 
 import logging
+import sys
 from datetime import date, datetime
+from pathlib import Path
+
 from fastapi import APIRouter, HTTPException, Query
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+import attribution  # type: ignore  # noqa: E402
 
 from ..aggregation import get_attribution, parse_brand, sum_lead_actions
 from ..deps import get_settings
@@ -125,16 +131,21 @@ def creatives(
             health_status=health_status,
         ))
 
-    # Winner / loser badges — bazując na real_cpl wzgl. avg
-    cpls = [r.real_cpl for r in rows if r.real_cpl is not None and r.spend >= 30]
+    # Winner / loser badges — bazujące na real_cpl względem avg.
+    # Gate: minimum 120 PLN spend AND 3 leady. Bez gate ad z 50 PLN i 1 leadem dostawał
+    # etykietę winnera, mimo że n=1 nie pozwala na statystyczne wnioski.
+    cpls = [
+        r.real_cpl for r in rows
+        if r.real_cpl is not None and r.spend >= 120 and r.ghl_leads >= 3
+    ]
     avg_cpl = (sum(cpls) / len(cpls)) if cpls else None
     if avg_cpl:
         for r in rows:
-            if r.real_cpl is None or r.spend < 30:
+            if r.real_cpl is None or r.spend < 120 or r.ghl_leads < 3:
                 continue
             if r.real_cpl < 0.8 * avg_cpl:
                 r.winner_badge = True
-            elif r.real_cpl > 1.5 * avg_cpl and r.spend >= 50:
+            elif r.real_cpl > 1.5 * avg_cpl:
                 r.loser_badge = True
 
     rows.sort(key=lambda r: r.spend, reverse=True)
@@ -186,23 +197,21 @@ def creative_detail(
     from_d = date.fromisoformat(from_)
     to_d = date.fromisoformat(to)
     pipelines = agg["_ghl_raw"].get("pipelines") or []
-    import sys as _sys
-    _sys.path.insert(0, str(__import__("pathlib").Path(__file__).resolve().parent.parent.parent))
-    import attribution  # type: ignore
     stage_map = attribution.build_stage_map(pipelines)
     opportunities = agg["_ghl_raw"].get("opportunities") or []
     calendar_events = agg["_ghl_raw"].get("calendar_events") or []  # Fix #A3
 
     for c in agg["_ghl_raw"].get("contacts") or []:
-        if not (c.get("email") or c.get("phone")):
+        # Spójne z agregatem: filtrujemy real leads (email/phone/lead tag) i bierzemy
+        # tylko jednoznaczną atrybucję (get_meta_ad_id zwraca None dla multi-touch).
+        if not attribution.is_real_lead(c):
             continue
-        attr_src = c.get("attributionSource") or c.get("lastAttributionSource") or {}
-        if str(attr_src.get("utmContent") or "") != ad_id:
+        if attribution.get_meta_ad_id(c) != ad_id:
             continue
-        try:
-            dt = datetime.fromisoformat((c.get("dateAdded") or "").replace("Z", "+00:00")).date()
-        except Exception:
+        parsed = attribution.parse_iso(c.get("dateAdded") or "")
+        if not parsed:
             continue
+        dt = parsed.astimezone(attribution.BUSINESS_TZ).date()
         if not (from_d <= dt <= to_d):
             continue
         cid = c["id"]

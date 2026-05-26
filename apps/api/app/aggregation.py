@@ -6,7 +6,7 @@ from __future__ import annotations
 import logging
 import sys
 from concurrent.futures import ThreadPoolExecutor
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Optional
 
@@ -15,6 +15,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import attribution  # type: ignore  # noqa: E402
 
 from .cache import cache
+from .data_quality import validate_ghl_snapshot, validate_meta_snapshot
 from .deps import get_settings
 from .schemas import Brand
 
@@ -27,6 +28,9 @@ def parse_brand(name: str) -> str:
     if not name:
         return Brand.OTHER
     n = name.lower()
+    # SP- prefix oznacza Salespros nawet jeśli nazwa zawiera "gawronify" (np. "SP-GAWRONIFY retarget").
+    if n.startswith("sp-"):
+        return Brand.SALESPROS
     if "gawronify" in n:
         return Brand.GAWRONIFY
     if "salespros" in n or "sales pros" in n or "salespro" in n:
@@ -68,9 +72,11 @@ def get_meta_data(from_date: str, to_date: str, prefer_live: bool = True, full: 
     """Zwraca strukturę zgodną z snapshotem Meta. Próbuje live, fallback snapshot.
     full=True: pobiera też adsets/ads/creatives (potrzebne dla /adsets i /creatives)."""
     if prefer_live:
+        from .meta_client import MetaRateLimited, build_meta_snapshot_like
         try:
-            from .meta_client import build_meta_snapshot_like
             return build_meta_snapshot_like(since=from_date, until=to_date, full=full)
+        except MetaRateLimited as e:
+            log.warning("Meta circuit breaker armed (%s) — fallback snapshot", e)
         except Exception as e:
             log.warning("Live Meta fetch failed (%s) — fallback snapshot", e)
     from .snapshot_loader import load_meta_snapshot
@@ -79,9 +85,12 @@ def get_meta_data(from_date: str, to_date: str, prefer_live: bool = True, full: 
 
 def get_meta_data_daily(level: str, from_date: str, to_date: str) -> list[dict]:
     """Insights per-day dla trend chartu (level: 'account' | 'campaign' | 'ad')."""
+    from .meta_client import MetaRateLimited, fetch_insights_daily
     try:
-        from .meta_client import fetch_insights_daily
         return fetch_insights_daily(level, from_date, to_date)
+    except MetaRateLimited as e:
+        log.warning("Meta circuit breaker armed (%s) — daily trend empty", e)
+        return []
     except Exception as e:
         log.warning("Daily insights fetch failed: %s", e)
         return []
@@ -122,8 +131,9 @@ def aggregate_range(meta: dict, ghl: dict, from_date: str, to_date: str) -> dict
         "all_contacts": 0, "real_leads": 0, "ig_sync_ghosts": 0,
         "paid_contacts": 0, "organic_contacts": 0, "other_contacts": 0,
         "bookings": 0, "sales": 0,
-        # Fix #A5: 3-bucket attribution
-        "utm_attributed_leads": 0, "paid_unmapped_leads": 0, "untrackable_leads": 0,
+        # 4-bucket attribution (fail-closed multi-touch)
+        "utm_attributed_leads": 0, "ambiguous_paid_leads": 0,
+        "paid_unmapped_leads": 0, "untrackable_leads": 0,
         # Fix #A3: flow metrics (events/opps w okresie, niezależnie od daty leada)
         "bookings_in_period": 0,
         "sales_in_period": 0,
@@ -151,8 +161,9 @@ def aggregate_range(meta: dict, ghl: dict, from_date: str, to_date: str) -> dict
         totals["organic_contacts"] += r["organic_contacts"]
         totals["other_contacts"] += r["other_contacts"]
         totals["bookings"] += len(r["bookings_today"])
-        # Fix #A5: 3-bucket
+        # 4-bucket attribution
         totals["utm_attributed_leads"] += r.get("utm_attributed_leads", 0)
+        totals["ambiguous_paid_leads"] += r.get("ambiguous_paid_leads", 0)
         totals["paid_unmapped_leads"] += r.get("paid_unmapped_leads", 0)
         totals["untrackable_leads"] += r.get("untrackable_leads", 0)
         for ad in r["per_ad"]:
@@ -186,7 +197,7 @@ def aggregate_range(meta: dict, ghl: dict, from_date: str, to_date: str) -> dict
             continue
         st = e.get("startTime") or ""
         try:
-            st_date = attribution.parse_iso(st).astimezone(attribution.LOCAL_TZ).date()
+            st_date = attribution.parse_iso(st).astimezone(attribution.BUSINESS_TZ).date()
         except Exception:
             continue
         if from_d <= st_date <= to_d:
@@ -216,13 +227,25 @@ def aggregate_range(meta: dict, ghl: dict, from_date: str, to_date: str) -> dict
         info = cs_stage_map.get(sid) or stage_map_for_sales.get(sid) or {}
         if info.get("stage_name") not in attribution.SALE_STAGES:
             continue
-        # Filter po dacie utworzenia opportunity (kupili w tym okresie)
-        created = o.get("createdAt") or o.get("dateAdded") or ""
-        try:
-            created_date = attribution.parse_iso(created).astimezone(attribution.LOCAL_TZ).date()
-        except Exception:
+        # Sale = stage sprzedażowy AND status closed-won. Sam stage nie wystarczy:
+        # opportunity może być w stage'u sprzedaży ale wciąż "open" (handel w toku) lub cofnięta.
+        if not attribution.is_closed_won(o):
             continue
-        if not (from_d <= created_date <= to_d):
+        # Sale period = data faktycznego wygrania (closedAt / lastStatusChangeAt), nie createdAt.
+        # Inaczej opp utworzona dziś i wygrana za tydzień wpadałaby w zły okres (deformacja ROAS).
+        sold_date_iso = (
+            o.get("closedAt")
+            or o.get("lastStatusChangeAt")
+            or o.get("lastStageChangeAt")
+            or o.get("createdAt")
+            or o.get("dateAdded")
+            or ""
+        )
+        parsed = attribution.parse_iso(sold_date_iso)
+        if not parsed:
+            continue
+        sold_date = parsed.astimezone(attribution.BUSINESS_TZ).date()
+        if not (from_d <= sold_date <= to_d):
             continue
         cid = o.get("contactId")
         # Wyklucz test contacts (np. Kamila Żak — env var EXCLUDED_CONTACT_IDS)
@@ -289,9 +312,11 @@ def aggregate_range(meta: dict, ghl: dict, from_date: str, to_date: str) -> dict
             camp_meta = camp_meta_by_id.get(cid) or {"id": cid}
             type_by_camp[cid] = classifier.classify_campaign(camp_meta)
 
-    # Dla per_ad — dziedzicz typ z parent campaign
+    # Dla per_ad — dziedzicz typ z parent campaign.
+    # Per-ad row ma `meta_campaign_id` (z attribution.py:420), nie `campaign_id` — wcześniej
+    # czytano złe pole, przez co WSZYSTKIE per-ad campaign_type lądowały jako "unknown".
     for row in per_ad.values():
-        cid = row.get("campaign_id", "")
+        cid = row.get("meta_campaign_id", "")
         row["campaign_type"] = type_by_camp.get(cid, "unknown")
 
     # Total Meta leads (aggregated)
@@ -334,18 +359,45 @@ def get_attribution(from_date: str, to_date: str, prefer_live: bool = True, full
         ghl_fut = ex.submit(get_ghl_data, prefer_live)
         meta = meta_fut.result()
         ghl = ghl_fut.result()
+
+    # Data quality gate — wykryj "ładne zera" (Meta 200 OK z pustą listą, GHL bez wymaganych pól).
+    # Jeśli live degraded, próbujemy fallback do snapshot z dysku. Jeśli i tak źle — zwracamy
+    # degraded error zamiast cache'ować nieprawdę.
+    meta_dq = validate_meta_snapshot(meta)
+    ghl_dq = validate_ghl_snapshot(ghl)
+    if prefer_live and (not meta_dq.ok or not ghl_dq.ok):
+        log.error("Live data degraded: meta=%s ghl=%s — próba fallback do snapshot", meta_dq.issues, ghl_dq.issues)
+        from .snapshot_loader import load_ghl_snapshot, load_meta_snapshot
+        snap_meta = load_meta_snapshot(target_date=to_date) or {}
+        snap_ghl = load_ghl_snapshot() or {}
+        snap_meta_dq = validate_meta_snapshot(snap_meta)
+        snap_ghl_dq = validate_ghl_snapshot(snap_ghl)
+        if snap_meta_dq.ok and snap_ghl_dq.ok:
+            meta, ghl = snap_meta, snap_ghl
+            meta_dq, ghl_dq = snap_meta_dq, snap_ghl_dq
+        else:
+            return {
+                "error": "degraded_data",
+                "from": from_date,
+                "to": to_date,
+                "data_quality_issues": meta_dq.issues + ghl_dq.issues,
+            }
+
     if not meta or not ghl:
         return {"error": "no data", "from": from_date, "to": to_date}
     agg = aggregate_range(meta, ghl, from_date, to_date)
     agg["_meta_raw"] = meta
     agg["_ghl_raw"] = ghl
+    agg["data_quality_issues"] = meta_dq.issues + ghl_dq.issues
     # Lite (overview/campaigns/funnel): 5 min — Meta nie zmienia się szybciej.
     # Full (adsets/creatives): 15 min — droższy fetch (creatives × ad_ids), wolniej się zmienia.
     # Historical range (to_date < dziś): 1h — dane immutable po zamknięciu okna atrybucji.
-    today = date.today().isoformat()
+    today = datetime.now(attribution.BUSINESS_TZ).date().isoformat()
     if to_date < today:
         ttl = 3600
     else:
         ttl = 900 if full else 300
-    cache().set(key, agg, ttl=ttl)
+    # Brak cache przy degradacji — żeby kolejne requesty miały szansę zobaczyć poprawkę.
+    if not agg["data_quality_issues"]:
+        cache().set(key, agg, ttl=ttl)
     return agg

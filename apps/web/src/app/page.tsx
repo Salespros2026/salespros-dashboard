@@ -158,10 +158,24 @@ async function OverviewContent({ filters }: { filters: ReturnType<typeof parseFi
         <HistoricalContextCard />
       </Suspense>
 
+      {data.data_quality_issues && data.data_quality_issues.length > 0 && (
+        <Card className="border-rose-500/40 bg-rose-500/5">
+          <CardContent className="py-3">
+            <div className="text-sm font-medium text-rose-300">⚠ Dane częściowo nieaktualne</div>
+            <div className="text-xs text-muted-foreground mt-1">
+              Snapshoty Meta / GHL mają braki — metryki poniżej mogą być niepełne. Issues:{" "}
+              <code className="text-xs">{data.data_quality_issues.join(", ")}</code>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {(() => {
-        const totalAttr = data.utm_attributed_leads + data.paid_unmapped_leads + data.untrackable_leads;
+        const ambiguous = data.ambiguous_paid_leads ?? 0;
+        const totalAttr = data.utm_attributed_leads + ambiguous + data.paid_unmapped_leads + data.untrackable_leads;
         if (totalAttr === 0) return null;
         const utmPct = (data.utm_attributed_leads / totalAttr) * 100;
+        const ambPct = (ambiguous / totalAttr) * 100;
         const unmapPct = (data.paid_unmapped_leads / totalAttr) * 100;
         const untrackPct = (data.untrackable_leads / totalAttr) * 100;
         return (
@@ -172,13 +186,18 @@ async function OverviewContent({ filters }: { filters: ReturnType<typeof parseFi
             <CardContent className="space-y-3">
               <div className="flex h-2 w-full overflow-hidden rounded-full bg-muted">
                 <div className="bg-emerald-500" style={{ width: `${utmPct}%` }} title="Meta paid + utm_content" />
+                <div className="bg-rose-500" style={{ width: `${ambPct}%` }} title="Multi-touch (>1 ad_id) — nie atrybutowane" />
                 <div className="bg-amber-500" style={{ width: `${unmapPct}%` }} title="Meta paid bez utm_content" />
                 <div className="bg-slate-500" style={{ width: `${untrackPct}%` }} title="Organic / direct / inne" />
               </div>
-              <div className="grid grid-cols-3 gap-4 text-sm">
+              <div className="grid grid-cols-2 gap-4 text-sm md:grid-cols-4">
                 <div>
                   <div className="flex items-center gap-2"><span className="h-2 w-2 rounded-full bg-emerald-500"/><span className="font-medium">{fInt(data.utm_attributed_leads)}</span><span className="text-muted-foreground">({utmPct.toFixed(0)}%)</span></div>
-                  <div className="text-xs text-muted-foreground mt-1">Meta paid + utm_content<br/>→ wiemy z której kreacji</div>
+                  <div className="text-xs text-muted-foreground mt-1">Meta paid + 1 utm_content<br/>→ wiemy z której kreacji</div>
+                </div>
+                <div>
+                  <div className="flex items-center gap-2"><span className="h-2 w-2 rounded-full bg-rose-500"/><span className="font-medium">{fInt(ambiguous)}</span><span className="text-muted-foreground">({ambPct.toFixed(0)}%)</span></div>
+                  <div className="text-xs text-muted-foreground mt-1">Multi-touch (&gt;1 ad_id)<br/>→ nie da się jednoznacznie przypisać</div>
                 </div>
                 <div>
                   <div className="flex items-center gap-2"><span className="h-2 w-2 rounded-full bg-amber-500"/><span className="font-medium">{fInt(data.paid_unmapped_leads)}</span><span className="text-muted-foreground">({unmapPct.toFixed(0)}%)</span></div>
@@ -191,7 +210,7 @@ async function OverviewContent({ filters }: { filters: ReturnType<typeof parseFi
               </div>
               <div className="text-xs text-muted-foreground border-t pt-2">
                 Łącznie {fInt(totalAttr)} realnych leadów + {fInt(data.ig_sync_ghosts)} IG-sync ghostów (odfiltrowane).
-                Per-creative metryki w sekcji <strong>Kreacje</strong> używają tylko tych {fInt(data.utm_attributed_leads)} z mocną attribution.
+                Per-creative metryki w sekcji <strong>Kreacje</strong> używają tylko tych {fInt(data.utm_attributed_leads)} z jednoznaczną attribution.
               </div>
             </CardContent>
           </Card>

@@ -204,12 +204,19 @@ def overview(
         revenue=revenue_flow,
         cpa=(spend / sales_flow) if sales_flow else None,
         roas=(revenue_flow / spend) if spend else None,
-        # Fix #A5: 3-bucket attribution (account-level, brand-agnostic)
+        # 4-bucket attribution (account-level, brand-agnostic, fail-closed na multi-touch)
         utm_attributed_leads=agg["totals"].get("utm_attributed_leads", 0),
+        ambiguous_paid_leads=agg["totals"].get("ambiguous_paid_leads", 0),
         paid_unmapped_leads=agg["totals"].get("paid_unmapped_leads", 0),
         untrackable_leads=agg["totals"].get("untrackable_leads", 0),
+        data_quality_issues=agg.get("data_quality_issues", []),
         # Fix #A3: flow metrics — bookings/sales/revenue ze wszystkich pipelines
         bookings_in_period=agg["totals"].get("bookings_in_period", 0),
         sales_in_period=agg["totals"].get("sales_in_period", 0),
         revenue_in_period=agg["totals"].get("revenue_in_period", 0.0),
+        # Explicit cohort vs flow
+        cohort_bookings=bookings,
+        flow_bookings=agg["totals"].get("bookings_in_period", 0),
+        cohort_sales=sales,
+        flow_sales=sales_flow,
     )

@@ -65,8 +65,9 @@ class OverviewResponse(BaseModel):
     revenue: float = 0.0
     cpa: float | None = None  # spend / sales (zamknięte sprzedaże)
     roas: float | None = None  # revenue / spend
-    # Fix #A5: Three-bucket attribution
-    utm_attributed_leads: int = 0   # paid_social + utmContent → mocna attribution per kreacja
+    # Four-bucket attribution (fail-closed na multi-touch)
+    utm_attributed_leads: int = 0   # paid_social + dokładnie 1 ad_id → mocna attribution per kreacja
+    ambiguous_paid_leads: int = 0   # paid_social + >1 ad_id (multi-touch, nie atrybutowane do żadnej kreacji)
     paid_unmapped_leads: int = 0    # paid_social bez utmContent (Meta wie, my nie wiemy która kreacja)
     untrackable_leads: int = 0      # real ale bez Meta paid attribution (IG-organic, direct, inne)
     # Fix #A3: flow metric — wszystkie spotkania w okresie (calendar events startTime in range)
@@ -74,6 +75,16 @@ class OverviewResponse(BaseModel):
     # Sales/revenue flow — wszystkie sprzedaże w pipelinach (closing + CS) z opp createdAt w okresie
     sales_in_period: int = 0         # vs `sales` (paid kohort)
     revenue_in_period: float = 0.0   # vs `revenue` (paid kohort)
+    # Explicit cohort vs flow — żeby UI nie mieszał metryk pod jedną etykietą.
+    # cohort_* = liczby z paid attribution cohort (leady atrybutowane do kreacji).
+    # flow_*   = liczby z całego pipeline w okresie (wszystkie kanały, closing + CS).
+    cohort_bookings: int = 0
+    flow_bookings: int = 0
+    cohort_sales: int = 0
+    flow_sales: int = 0
+    # Data quality — niepuste gdy snapshot Meta/GHL ma braki (puste insights, brak pól wymaganych).
+    # UI powinien pokazać banner ostrzegawczy gdy lista nie jest pusta.
+    data_quality_issues: list[str] = []
 
     model_config = {"populate_by_name": True}
 

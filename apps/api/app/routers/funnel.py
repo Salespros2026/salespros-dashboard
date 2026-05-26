@@ -63,10 +63,8 @@ def funnel(
             continue
         # Filtruj po dacie zmiany stage'a (lub createdAt jeśli brak)
         change = o.get("lastStageChangeAt") or o.get("createdAt")
-        try:
-            dt = datetime.fromisoformat((change or "").replace("Z", "+00:00")).date()
-        except Exception:
-            dt = None
+        parsed = attribution.parse_iso(change or "")
+        dt = parsed.astimezone(attribution.BUSINESS_TZ).date() if parsed else None
         if dt and not (from_d <= dt <= to_d):
             continue
         stage_name = info.get("stage_name", "?")
