@@ -1,9 +1,14 @@
 #!/bin/bash
 # Cron warmup — utrzymuje cache backendu hot, żeby user nigdy nie trafiał na cold call.
-# Hituje top 6 najczęstszych kombinacji filter (overview/campaigns × dziś/7d/30d × all/gawronify).
+# Hituje 4 najczęstsze kombinacje filter (overview/campaigns × 7d/30d × all).
 # Cache TTL w aggregation.py: lite 5min, full 15min, historical 1h.
 #
-# Crontab: */5 * * * * bash /root/salespros-dashboard/deploy/warmup.sh > /tmp/warmup.log 2>&1
+# Crontab: */15 * * * * bash /root/salespros-dashboard/deploy/warmup.sh > /tmp/warmup.log 2>&1
+#
+# UWAGA — historia: warmup był */5 z 6 endpointami → 72 calls/h do Meta API per ad account.
+# To wraz z user requestami + Mac daily_run.sh przekraczało Meta Ad-Account-Level Rate Limit
+# (error code 17/subcode 2446079) i powodowało, że /api/creatives, /api/adsets oraz lokalny
+# meta_snapshot.py cicho fallbackowały na stary snapshot. */15 z 4 endpointami = 16 calls/h.
 
 set -euo pipefail
 
@@ -35,10 +40,12 @@ hit() {
 		echo "$(date +%H:%M:%S) ✗ $label FAILED"
 }
 
-# Top 6 kombinacji — pokrywa większość ruchu user'a.
-hit "/api/overview?from=$TODAY&to=$TODAY&brand=all" "overview-today-all"
+# Top 4 — tylko najczęstsze ścieżki użytkownika.
+# Wycięte (rate limit dieta):
+#   - overview-today-all → cache i tak hituje za 1 user request, nie warto warmować
+#   - overview-7d-gawronify → user rzadko przełącza brand, lazy load wystarczy
+#   - admin-campaigns → tylko ad-hoc na admin page
 hit "/api/overview?from=$WEEK_AGO&to=$TODAY&brand=all" "overview-7d-all"
-hit "/api/overview?from=$WEEK_AGO&to=$TODAY&brand=gawronify" "overview-7d-gawronify"
+hit "/api/overview?from=$MONTH_AGO&to=$TODAY&brand=all" "overview-30d-all"
 hit "/api/campaigns?from=$WEEK_AGO&to=$TODAY&brand=all" "campaigns-7d-all"
 hit "/api/campaigns?from=$MONTH_AGO&to=$TODAY&brand=all" "campaigns-30d-all"
-hit "/api/admin/campaigns" "admin-campaigns"
