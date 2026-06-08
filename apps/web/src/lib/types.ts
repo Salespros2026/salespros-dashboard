@@ -111,6 +111,9 @@ export interface AdsetRow {
   parent_campaign_name: string;
   brand: Brand;
   status: string;
+  // "WITH_INSIGHTS" = ma dane w zakresie. "NO_DATA" = adset istnieje w Meta (np.
+  // świeżo wgrany, scheduled, w review) ale jeszcze nie wydał — pokaż go z badge.
+  data_status?: "WITH_INSIGHTS" | "NO_DATA";
   optimization_goal: string | null;
   spend: number;
   impressions: number;
@@ -136,6 +139,8 @@ export interface CreativeRow {
   campaign_name: string;
   brand: Brand;
   status: string;
+  // "NO_DATA" = ad istnieje ale jeszcze nie wydał. Patrz AdsetRow.
+  data_status?: "WITH_INSIGHTS" | "NO_DATA";
   thumbnail_url: string | null;
   video_id: string | null;
   creative_title: string | null;

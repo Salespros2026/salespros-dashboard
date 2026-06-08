@@ -64,6 +64,14 @@ const columns: ColumnDef<CreativeRow>[] = [
               <TooltipContent>Real CPL &gt; 150% średniej, spend ≥50 PLN — kandydat do pauzy.</TooltipContent>
             </Tooltip>
           )}
+          {row.original.data_status === "NO_DATA" && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Badge className="bg-blue-500/20 text-blue-300 border-blue-500/40">NOWY</Badge>
+              </TooltipTrigger>
+              <TooltipContent>Kreacja istnieje w Meta ale jeszcze nie ma impresji/spend w tym zakresie dat.</TooltipContent>
+            </Tooltip>
+          )}
         </div>
         <span className="truncate text-sm" title={row.original.ad_name}>{row.original.ad_name}</span>
         <span className="truncate text-xs text-muted-foreground" title={row.original.campaign_name}>

@@ -125,6 +125,10 @@ class AdsetRow(BaseModel):
     parent_campaign_name: str
     brand: str
     status: str
+    # data_status="NO_DATA" → adset istnieje w Meta ale jeszcze nie wydał (np. scheduled,
+    # świeżo wgrany, w review). UI powinno pokazać go z "—" zamiast pomijać.
+    # data_status="WITH_INSIGHTS" → ma wpisy w Meta insights za zakres dat.
+    data_status: str = "WITH_INSIGHTS"
     optimization_goal: str | None = None
     spend: float
     impressions: int
@@ -150,6 +154,8 @@ class CreativeRow(BaseModel):
     campaign_name: str
     brand: str
     status: str
+    # data_status="NO_DATA" → ad istnieje w Meta ale jeszcze nie wydał. Patrz AdsetRow.
+    data_status: str = "WITH_INSIGHTS"
     thumbnail_url: str | None = None
     video_id: str | None = None
     creative_title: str | None = None

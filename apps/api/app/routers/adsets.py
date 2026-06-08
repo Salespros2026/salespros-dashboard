@@ -23,9 +23,17 @@ def adsets(
         return AdsetsResponse(adsets=[])
 
     meta = agg["_meta_raw"]
-    adsets_by_id = {a["id"]: a for a in meta.get("adsets", [])}
-    campaigns_by_id = {c["id"]: c for c in meta.get("campaigns", [])}
-    insights_adset = {ins.get("adset_id"): ins for ins in agg["insights_adset"]}
+    adsets_by_id = {a["id"]: a for a in meta.get("adsets", []) if a.get("id")}
+    campaigns_by_id = {c["id"]: c for c in meta.get("campaigns", []) if c.get("id")}
+    insights_adset = {
+        ins.get("adset_id"): ins
+        for ins in agg["insights_adset"]
+        if ins.get("adset_id")
+    }
+    # Union: pokaż wszystkie adsety które istnieją w Meta (ze status ACTIVE/PAUSED) +
+    # te które mają insights w zakresie dat. Nowo utworzone ACTIVE adsety bez spend są
+    # teraz widoczne z data_status="NO_DATA" zamiast w ogóle ich brakować.
+    all_adset_ids = set(adsets_by_id) | set(insights_adset)
 
     # Agregacja sales/bookings/revenue per adset — sumuj z per_ad pod parent adset_id
     ad_to_adset = {ad["id"]: ad.get("adset_id") for ad in meta.get("ads", []) if ad.get("adset_id")}
@@ -64,14 +72,20 @@ def adsets(
         leads_by_adset[str(adset_id)] = leads_by_adset.get(str(adset_id), 0) + 1
 
     rows: list[AdsetRow] = []
-    for asid, ins in insights_adset.items():
+    for asid in all_adset_ids:
+        ins = insights_adset.get(asid, {})
         meta_obj = adsets_by_id.get(asid, {})
+        has_insights = asid in insights_adset
         parent_camp_id = meta_obj.get("campaign_id") or ins.get("campaign_id") or ""
         parent_camp = campaigns_by_id.get(parent_camp_id, {})
         if campaign_id and parent_camp_id != campaign_id:
             continue
         b = parse_brand(parent_camp.get("name") or "")
         if brand != "all" and b != brand:
+            continue
+        status = (meta_obj.get("effective_status") or meta_obj.get("status") or "?").upper()
+        # Skip adsety które są w ARCHIVE/DELETED status i nie mają insights (martwe).
+        if not has_insights and status in {"ARCHIVED", "DELETED"}:
             continue
         spend = float(ins.get("spend", 0) or 0)
         ghl_leads = leads_by_adset.get(asid, 0)
@@ -83,7 +97,8 @@ def adsets(
             parent_campaign_id=parent_camp_id,
             parent_campaign_name=parent_camp.get("name") or ins.get("campaign_name") or "",
             brand=b,
-            status=(meta_obj.get("effective_status") or meta_obj.get("status") or "?").upper(),
+            status=status,
+            data_status="WITH_INSIGHTS" if has_insights else "NO_DATA",
             optimization_goal=meta_obj.get("optimization_goal"),
             spend=spend,
             impressions=int(float(ins.get("impressions", 0) or 0)),
@@ -98,5 +113,12 @@ def adsets(
             cpa=(spend / sales) if sales else None,
             roas=(revenue / spend) if spend else None,
         ))
-    rows.sort(key=lambda r: r.spend, reverse=True)
+    # Sort: najpierw ACTIVE z NO_DATA (świeże, czekają na delivery), potem reszta po spend desc.
+    rows.sort(
+        key=lambda r: (
+            r.data_status == "NO_DATA" and r.status == "ACTIVE",
+            r.spend,
+        ),
+        reverse=True,
+    )
     return AdsetsResponse(adsets=rows)

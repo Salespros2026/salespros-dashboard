@@ -17,6 +17,14 @@ const columns: ColumnDef<AdsetRow>[] = [
         <span className="truncate max-w-[260px]" title={row.original.name}>
           {row.original.name}
         </span>
+        {row.original.data_status === "NO_DATA" && (
+          <span
+            className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-blue-500/15 text-blue-300 border border-blue-500/30 shrink-0"
+            title="Adset istnieje w Meta ale jeszcze nie ma impresji/spend w tym zakresie dat (świeżo wgrany, scheduled lub w review)."
+          >
+            NOWY
+          </span>
+        )}
       </div>
     ),
   },

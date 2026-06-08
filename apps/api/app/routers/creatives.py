@@ -37,17 +37,25 @@ def creatives(
         return CreativesResponse(creatives=[], avg_real_cpl=None)
 
     meta = agg["_meta_raw"]
-    ads_by_id = {a["id"]: a for a in meta.get("ads", [])}
+    ads_by_id = {a["id"]: a for a in meta.get("ads", []) if a.get("id")}
     creatives_by_ad_id = meta.get("creatives_by_ad_id") or {}
-    campaigns_by_id = {c["id"]: c for c in meta.get("campaigns", [])}
-    insights_ad = {ins.get("ad_id"): ins for ins in agg["insights_ad"]}
+    campaigns_by_id = {c["id"]: c for c in meta.get("campaigns", []) if c.get("id")}
+    insights_ad = {
+        ins.get("ad_id"): ins for ins in agg["insights_ad"] if ins.get("ad_id")
+    }
 
     # Build map ad_id → ghl rollup z agg["per_ad"]
     per_ad_map = {a["ad_id"]: a for a in agg["per_ad"]}
 
+    # Union: pokaż wszystkie ady które istnieją w Meta + te które mają insights w zakresie.
+    # Nowo wgrane ACTIVE ady bez spend są teraz widoczne z data_status="NO_DATA".
+    all_ad_ids = set(ads_by_id) | set(insights_ad)
+
     rows: list[CreativeRow] = []
-    for ad_id, ins in insights_ad.items():
+    for ad_id in all_ad_ids:
+        ins = insights_ad.get(ad_id, {})
         ad_meta = ads_by_id.get(ad_id, {})
+        has_insights = ad_id in insights_ad
         creative = creatives_by_ad_id.get(ad_id, {})
         camp_id = ad_meta.get("campaign_id") or ins.get("campaign_id") or ""
         camp = campaigns_by_id.get(camp_id, {})
@@ -55,6 +63,10 @@ def creatives(
         if brand != "all" and b != brand:
             continue
         if campaign_id and camp_id != campaign_id:
+            continue
+        status = (ad_meta.get("effective_status") or ad_meta.get("status") or "?").upper()
+        # Skip ARCHIVED/DELETED ady bez insights — martwe.
+        if not has_insights and status in {"ARCHIVED", "DELETED"}:
             continue
         spend = float(ins.get("spend", 0) or 0)
         impressions = int(float(ins.get("impressions", 0) or 0))
@@ -106,7 +118,8 @@ def creatives(
             ad_name=ad_meta.get("name") or ins.get("ad_name") or ad_id,
             campaign_name=camp.get("name") or ins.get("campaign_name") or "",
             brand=b,
-            status=(ad_meta.get("effective_status") or ad_meta.get("status") or "?").upper(),
+            status=status,
+            data_status="WITH_INSIGHTS" if has_insights else "NO_DATA",
             thumbnail_url=creative.get("thumbnail_url") or creative.get("image_url"),
             video_id=creative.get("video_id"),
             creative_title=creative.get("title"),
@@ -148,7 +161,14 @@ def creatives(
             elif r.real_cpl > 1.5 * avg_cpl:
                 r.loser_badge = True
 
-    rows.sort(key=lambda r: r.spend, reverse=True)
+    # Sort: ACTIVE NO_DATA na górze (świeże), potem reszta po spend desc.
+    rows.sort(
+        key=lambda r: (
+            r.data_status == "NO_DATA" and r.status == "ACTIVE",
+            r.spend,
+        ),
+        reverse=True,
+    )
     return CreativesResponse(creatives=rows, avg_real_cpl=avg_cpl)
 
 

@@ -113,6 +113,28 @@ def _creative_cache_put(creative_id: str, data: dict) -> None:
     with _creative_cache_lock:
         _creative_cache[creative_id] = (data, time.time())
 
+
+def clear_creative_cache() -> int:
+    """Czyści cache creative metadata. Zwraca liczbę usuniętych wpisów.
+    Wołane przez POST /api/refresh — gdy user chce hard refresh thumbnaili po
+    re-uploadzie kreacji w Meta Ads Manager."""
+    with _creative_cache_lock:
+        n = len(_creative_cache)
+        _creative_cache.clear()
+    log.info("Creative cache cleared (%d entries)", n)
+    return n
+
+
+def reset_circuit_breaker() -> bool:
+    """Wymusza reset circuit breakera. Zwraca True jeśli był armed."""
+    global _rate_limit_until
+    with _rate_limit_lock:
+        was_armed = _rate_limit_until > time.time()
+        _rate_limit_until = 0.0
+    if was_armed:
+        log.info("Circuit breaker reset manually")
+    return was_armed
+
 _INSIGHT_FIELDS = [
     "spend", "impressions", "reach", "clicks", "ctr", "cpc", "cpm",
     "frequency", "actions", "cost_per_action_type",
@@ -351,11 +373,23 @@ def build_meta_snapshot_like(since: str, until: str, full: bool = False) -> dict
         if full:
             adsets = adsets_fut.result()
             ads = ads_fut.result()
-            spending_ad_ids = {ins.get("ad_id") for ins in insights["ad"] if float(ins.get("spend", 0) or 0) > 0}
-            # ads_meta=ads → użyje creative_id z metadanych zamiast 1 callu Meta per ad.
-            # Plus _creative_cache trzyma metadane 24h. Łącznie: ~25 calli → 0-3 calli.
+            # Pobierz creative metadata dla:
+            # 1. Adów ze spend > 0 w zakresie (oczywiste)
+            # 2. ACTIVE adów BEZ spend yet (świeżo wgrane, scheduled, w review)
+            #    — żeby /api/creatives mogło je pokazać z data_status="NO_DATA" + thumbnailem.
+            spending_ad_ids = {
+                ins.get("ad_id") for ins in insights["ad"]
+                if float(ins.get("spend", 0) or 0) > 0
+            }
+            active_ad_ids = {
+                a.get("id") for a in ads
+                if (a.get("effective_status") or a.get("status") or "").upper() == "ACTIVE"
+            }
+            target_ad_ids = (spending_ad_ids | active_ad_ids) - {None, ""}
+            # ads_meta=ads → creative_id z metadanych zamiast 1 callu Meta per ad.
+            # _creative_cache trzyma metadane 24h. Łącznie: ~25-40 calli → 0-3 calli.
             creatives_by_ad_id = fetch_creatives_by_ad_id(
-                list(spending_ad_ids), ads_meta=ads,
+                list(target_ad_ids), ads_meta=ads,
             )
         else:
             adsets = []
