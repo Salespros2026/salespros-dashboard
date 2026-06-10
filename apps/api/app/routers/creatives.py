@@ -65,8 +65,10 @@ def creatives(
         if campaign_id and camp_id != campaign_id:
             continue
         status = (ad_meta.get("effective_status") or ad_meta.get("status") or "?").upper()
-        # Skip ARCHIVED/DELETED ady bez insights — martwe.
-        if not has_insights and status in {"ARCHIVED", "DELETED"}:
+        # NO_DATA tylko dla statusów które realnie mogą czekać na delivery.
+        # Patrz routers/adsets.py dla rationale.
+        _VISIBLE_NO_DATA = {"ACTIVE", "IN_PROCESS", "WITH_ISSUES", "PENDING_REVIEW", "PREAPPROVED"}
+        if not has_insights and status not in _VISIBLE_NO_DATA:
             continue
         spend = float(ins.get("spend", 0) or 0)
         impressions = int(float(ins.get("impressions", 0) or 0))

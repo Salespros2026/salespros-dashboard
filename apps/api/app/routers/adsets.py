@@ -84,8 +84,12 @@ def adsets(
         if brand != "all" and b != brand:
             continue
         status = (meta_obj.get("effective_status") or meta_obj.get("status") or "?").upper()
-        # Skip adsety które są w ARCHIVE/DELETED status i nie mają insights (martwe).
-        if not has_insights and status in {"ARCHIVED", "DELETED"}:
+        # Dla NO_DATA rows pokazujemy TYLKO statusy które realnie mogą czekać na delivery:
+        # ACTIVE (świeżo wgrane, scheduled), IN_PROCESS (Meta jeszcze procesuje),
+        # WITH_ISSUES (Meta flagged, ale może wrócić). PAUSED/ARCHIVED/DELETED bez
+        # spend w zakresie to po prostu martwe historyczne adsety — ignoruj.
+        _VISIBLE_NO_DATA = {"ACTIVE", "IN_PROCESS", "WITH_ISSUES", "PENDING_REVIEW", "PREAPPROVED"}
+        if not has_insights and status not in _VISIBLE_NO_DATA:
             continue
         spend = float(ins.get("spend", 0) or 0)
         ghl_leads = leads_by_adset.get(asid, 0)
