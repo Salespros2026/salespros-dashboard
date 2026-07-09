@@ -300,3 +300,36 @@ class InsightsResponse(BaseModel):
     date: str | None                 # data dla której wygenerowano
     account_summary: AccountSummary | None = None
     model: str | None = None         # np. "anthropic/claude-sonnet-4.5"
+
+
+class FatigueMetrics(BaseModel):
+    spend_7d: float | None = None
+    frequency: float | None = None
+    days_with_data: int | None = None
+    age_days_in_window: int | None = None
+
+
+class FatigueAd(BaseModel):
+    ad_id: str
+    ad_name: str | None = None
+    campaign_name: str | None = None
+    campaign_type: str = "acquisition"   # "acquisition" | "retarget" | "unknown"
+    verdict: str                         # "ok" | "watch" | "rotate" | "kill"
+    reasons: list[str] = []
+    metrics: FatigueMetrics | None = None
+
+
+class FatigueSummary(BaseModel):
+    ok: int = 0
+    watch: int = 0
+    rotate: int = 0
+    kill: int = 0
+
+
+class FatigueResponse(BaseModel):
+    ads: list[FatigueAd]
+    summary: FatigueSummary | None = None
+    window_days: int | None = None
+    generated_at: str | None
+    stale: bool                      # True jeśli pokazujemy starsze niż dziś
+    date: str | None                 # data dla której wygenerowano (fatigue-YYYY-MM-DD.json)

@@ -10,6 +10,7 @@ import type {
   CampaignsResponse,
   CreativeDetailResponse,
   CreativesResponse,
+  FatigueResponse,
   FunnelResponse,
   HistoricalContextResponse,
   InsightsResponse,
@@ -74,4 +75,5 @@ export const api = {
   adminCampaigns: () => getNoFilters<AdminCampaignsResponse>("/api/admin/campaigns"),
   historicalContext: () => getNoFilters<HistoricalContextResponse>("/api/historical-context"),
   insights: () => getNoFilters<InsightsResponse>("/api/insights"),
+  fatigue: () => getNoFilters<FatigueResponse>("/api/fatigue"),
 };

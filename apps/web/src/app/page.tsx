@@ -9,7 +9,8 @@ import { TrendChart } from "@/components/trend-chart";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { api } from "@/lib/api";
 import { fInt, fPln } from "@/lib/format";
-import { parseFilters } from "@/lib/filters";
+import { filtersToQueryString, parseFilters } from "@/lib/filters";
+import type { CreativeRow } from "@/lib/types";
 
 export const revalidate = 60;
 
@@ -44,9 +45,9 @@ async function OverviewContent({ filters }: { filters: ReturnType<typeof parseFi
 
   return (
     <div className="space-y-6">
-      {/* AI Insights — codzienne sugestie od claude-sonnet-4.5 (top of overview) */}
-      <Suspense fallback={<Card><CardContent className="py-3 text-xs text-muted-foreground">Ładowanie AI Insights…</CardContent></Card>}>
-        <InsightsPanelLoader />
+      {/* "Co robić dziś" — AI Insights + twarde werdykty fatigue, z miniaturkami kreacji */}
+      <Suspense fallback={<Card><CardContent className="py-3 text-xs text-muted-foreground">Ładowanie werdyktów…</CardContent></Card>}>
+        <InsightsPanelLoader filters={filters} />
       </Suspense>
 
       {split && split.untagged_count > 0 && (
@@ -239,9 +240,17 @@ async function FilterBarFromOverview({ filters }: { filters: ReturnType<typeof p
   return <FilterBar lastUpdated={data?.last_updated_iso ?? null} />;
 }
 
-async function InsightsPanelLoader() {
-  const data = await api.insights().catch(() => null);
-  return <InsightsPanel data={data} />;
+async function InsightsPanelLoader({ filters }: { filters: ReturnType<typeof parseFilters> }) {
+  // Równolegle: AI insights + fatigue werdykty + kreacje (join po ad_id → miniaturki/metryki).
+  const [data, fatigue, creativesRes] = await Promise.all([
+    api.insights().catch(() => null),
+    api.fatigue().catch(() => null),
+    api.creatives(filters).catch(() => null),
+  ]);
+  const creativesById: Record<string, CreativeRow> = {};
+  for (const c of creativesRes?.creatives ?? []) creativesById[c.ad_id] = c;
+  const qs = filtersToQueryString(filters);
+  return <InsightsPanel data={data} fatigue={fatigue} creativesById={creativesById} qs={qs} />;
 }
 
 async function HistoricalContextCard() {

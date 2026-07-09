@@ -265,6 +265,39 @@ export interface InsightsResponse {
   model: string | null;
 }
 
+export interface FatigueMetrics {
+  spend_7d: number | null;
+  frequency: number | null;
+  days_with_data: number | null;
+  age_days_in_window: number | null;
+}
+
+export interface FatigueAd {
+  ad_id: string;
+  ad_name: string | null;
+  campaign_name: string | null;
+  campaign_type: "acquisition" | "retarget" | "unknown" | string;
+  verdict: "ok" | "watch" | "rotate" | "kill" | string;
+  reasons: string[];
+  metrics: FatigueMetrics | null;
+}
+
+export interface FatigueSummary {
+  ok: number;
+  watch: number;
+  rotate: number;
+  kill: number;
+}
+
+export interface FatigueResponse {
+  ads: FatigueAd[];
+  summary: FatigueSummary | null;
+  window_days: number | null;
+  generated_at: string | null;
+  stale: boolean;
+  date: string | null;
+}
+
 export interface AdminCampaignsResponse {
   campaigns: AdminCampaignRow[];
   untagged_count: number;
